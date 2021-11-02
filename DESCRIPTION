@@ -24,3 +24,5 @@ Imports:
     terra,
     tidyr,
     zonal
+URL: https://github.com/mikejohnson51/hyRelease
+BugReports: https://github.com/mikejohnson51/hyRelease/issues
