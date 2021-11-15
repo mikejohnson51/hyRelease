@@ -9,7 +9,7 @@ get_catchment_edges_terms(
   nexus_prefix = "nex-",
   terminal_nexus_prefix = "tnx-",
   catchment_prefix = "cat-",
-  cutoff = 100000000
+  cutoff = 1e+08
 )
 }
 \arguments{

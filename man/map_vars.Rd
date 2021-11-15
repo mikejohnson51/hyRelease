@@ -4,7 +4,16 @@
 \alias{map_vars}
 \title{Map Variables}
 \usage{
-map_vars(r, w, file = NULL, precision = 9, FUN = "mean", verbose = TRUE)
+map_vars(
+  r,
+  w,
+  file = NULL,
+  precision = 9,
+  FUN = "mean",
+  single_layer = FALSE,
+  verbose = TRUE,
+  prefix = NULL
+)
 }
 \arguments{
 \item{r}{a file path, terra SpatRaster or raster raster object}

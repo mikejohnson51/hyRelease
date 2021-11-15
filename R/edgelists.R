@@ -43,8 +43,8 @@ get_catchment_edges_terms = function(flowpaths,
 #' @importFrom dplyr select mutate
 
 get_waterbody_edges_terms = function(flowpaths,
-                                     wb_prefix = "nex-",
-                                     terminal_wb_prefix = "tnx-",
+                                     wb_prefix = "wb-",
+                                     terminal_wb_prefix = "twb-",
                                      cutoff = 100000000){
 
   fline = select(st_drop_geometry(flowpaths), ID, toID)
@@ -55,7 +55,7 @@ get_waterbody_edges_terms = function(flowpaths,
 }
 
 
-get_catchment_data = function(catchment, catchment_edge_list, catchment_prefix = "catchment_") {
+get_catchment_data = function(catchment, catchment_edge_list, catchment_prefix = "cat-") {
 
   select(catchment, ID = .data$ID, area_sqkm = .data$area_sqkm) %>%
     mutate(ID = paste0(catchment_prefix, .data$ID)) %>%
@@ -63,7 +63,7 @@ get_catchment_data = function(catchment, catchment_edge_list, catchment_prefix =
 }
 
 
-get_flowpath_data = function(fline, catchment_edge_list, catchment_prefix = "catchment_") {
+get_flowpath_data = function(fline, catchment_edge_list, catchment_prefix = "cat-") {
 
   select(fline, ID = .data$ID, length_km = .data$length_km,
          slope_percent = .data$slope, main_id = .data$LevelPathID, member_COMID = .data$member_COMID) %>%

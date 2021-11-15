@@ -1,3 +1,4 @@
+
 #' Aggregated LSTM variables
 #' @param gpkg a geopackage with aggregation units
 #' @param catchment_name the layer name of the aggregation units
@@ -12,9 +13,8 @@
 #' @importFrom dplyr  `%>%` filter arrange desc slice arrange pull left_join rename mutate group_by summarise ungroup
 #' @importFrom zonal weighting_grid execute_zonal execute_zonal_cat
 #' @importFrom foreach `%dopar%` foreach
-#' @importFrom parallel detectCores
-#' @importFrom doParallel registerDoParallel
-#' @importFrom data.table setnames data.table as.data.table fwrite
+#' @importFrom doMC registerDoMC
+#' @importFrom data.table setnames data.table as.data.table fwrite `:=`
 #' @importFrom terra rast terrain classify window ext
 
 aggregate_lstm_params = function(gpkg,
@@ -23,6 +23,8 @@ aggregate_lstm_params = function(gpkg,
                                  years = 3,
                                  precision = 9,
                                  out_file = NULL){
+
+  .SD <- NULL
 
   files = geo_cache_list(geo_dir)
 
@@ -49,19 +51,17 @@ aggregate_lstm_params = function(gpkg,
 
   gridmet_w = zonal::weighting_grid(pr$fullname[1], cats, "ID")
 
-  `%dopar%` <- foreach::`%dopar%`
-  no_cores  <- parallel::detectCores() - 1
   suppressWarnings({
-    doParallel::registerDoParallel(cores = no_cores)
 
-  pr_list = foreach::foreach(i = 1:nrow(pr), .combine = cbind) %dopar% {
-    zonal::execute_zonal(file = pr$fullname[i], w = gridmet_w)[,-c("ID")]
-  }
+    doMC::registerDoMC()
 
-  tm_list = foreach::foreach(i = 1:nrow(tm), .combine = cbind) %dopar% {
-    zonal::execute_zonal(file = tm$fullname[i], w = gridmet_w)[,-c("ID")]
-  }
+    pr_list = foreach::foreach(i = 1:nrow(pr), .combine = cbind) %dopar% {
+      zonal::execute_zonal(file = pr$fullname[i], w = gridmet_w)[,-c("ID")]
+    }
 
+    tm_list = foreach::foreach(i = 1:nrow(tm), .combine = cbind) %dopar% {
+      zonal::execute_zonal(file = tm$fullname[i], w = gridmet_w)[,-c("ID")]
+    }
   })
 
   ppt  = setnames(pr_list, paste0('day', 1:ncol(pr_list)))
@@ -75,7 +75,7 @@ aggregate_lstm_params = function(gpkg,
   # Snow Fractions
   jennings = filter(files, grepl("jennings", fullname))
 
-  snow_tif = geogrid_warp(jennings$fullname, make_grid(tm$fullname[1]))
+  snow_tif = geogrid_warp(file = jennings$fullname, grid = make_grid(tm$fullname[1]), r = "bilinear")
 
   jen = zonal::execute_zonal(file = snow_tif, w = gridmet_w)
   jen$kelvins = jen$V1 + 273.15
@@ -116,9 +116,14 @@ aggregate_lstm_params = function(gpkg,
 
   DEM = filter(files, grepl("elevation", fullname))$fullname
   DEM = terra::rast(DEM)
-  t   = c(terra::terrain(DEM), DEM)
+
+  # t   = c(terra::terrain(DEM), DEM)
+  # terrain = zonal::execute_zonal(t, cats, 'ID') %>%
+  #   setnames(c("ID", "elevation", "slope"))
+
+  t = c(DEM, 1000*tan(terrain(DEM, v = "slope", unit = "radians")))
   terrain = zonal::execute_zonal(t, cats, 'ID') %>%
-    setNames(c("ID", "elevation", "slope"))
+    setnames(c("ID", "elevation", "slope"))
 
   terrain$areasqkm = as.numeric(st_area(cats)/1e6)
 
@@ -134,26 +139,37 @@ aggregate_lstm_params = function(gpkg,
   soils_w = zonal::weighting_grid(s$`clay-1m-percent`, cats, "ID")
 
   soils = zonal::execute_zonal(s, w = soils_w) %>%
-    setNames(c("ID", names(s)))
+    setNames(c("ID", names(s))) %>%
+    mutate(`clay-1m-percent` = `clay-1m-percent` * 100,
+           `sand-1m-percent` = `sand-1m-percent` * 100,
+           `silt-1m-percent` = `silt-1m-percent` * 100,
+            rockdepm = rockdepm / 100,
+           carbonate_rocks_frac = .data$GLIM_xx/ 100,
+           GLIM_xx = NULL,
+           soil_conductivity = -0.60 +  (0.0126*.data$`sand-1m-percent`) - (0.0064*.data$`clay-1m-percent`),
+           soil_conductivity = exp(.data$soil_conductivity),
+           geol_porostiy = 50.5 - (0.142*.data$`sand-1m-percent`)  - (0.037*.data$`clay-1m-percent`),
+           max_water_content = (.data$geol_porostiy/100) * .data$rockdepm)
 
-  soils = soils %>%
-    mutate(k = -0.60 +  (0.0126*`sand-1m-percent`) - (0.0064*`clay-1m-percent`),
-           k = exp(k),
-           volumetric_porosity = 50.5 - (0.142*`sand-1m-percent`)  - (0.037*`clay-1m-percent`),
-           max_water_content = (volumetric_porosity/100) * rockdepm) %>%
-  dplyr::rename(carbonates = GLIM_xx)
+
+  soils = filter(files, grepl('average_soil_and_sedimentary-deposit_thickness.tif', fullname))$fullname %>%
+    zonal::execute_zonal(cats, "ID") %>%
+    setnames(c("ID", "soil_depth_pelletier")) %>%
+    left_join(soils, by = "ID")
+
 
   traits = left_join(traits, soils, by = "ID")
 
   # Energy
   message("Processing Energy Information (PET, AI) ...")
 
-  energy = filter(files, grepl("ai_normal|pet_normal", fullname)) %>%
-    dplyr::pull(fullname) %>%
+  energy = filter(files, grepl("ai_normal|pet_normal", .data$fullname)) %>%
+    dplyr::pull(.data$fullname) %>%
     terra::rast()
 
   energy = zonal::execute_zonal(energy, w = gridmet_w) %>%
-    setnames(c("ID", names(energy)))
+    setnames(c("ID", "aridity", "pet_mean")) %>%
+    mutate(pet_mean = .data$pet_mean  *.1)
 
   traits = left_join(traits, energy, by = "ID")
 
@@ -161,12 +177,15 @@ aggregate_lstm_params = function(gpkg,
 
   message("Processing MODIS Landcover ...")
 
-  modis_lc = filter(files, grepl('MCD12Q1.006/1km/2019-01-01.tif', fullname))
+  modis_lc = filter(files, grepl('MCD12Q1.006/mosaics_cog/2019-01-01.tif$', .data$fullname))
 
-  lc_tiff = terra::rast(modis_lc$fullname) %>%
-    terra::crop(cats, snap = "out")
+  lc_tiff = terra::rast(modis_lc$fullname)
 
-  lu = zonal::execute_zonal_cat(lc_tiff, w = soils_w)
+  mod_500 = zonal::weighting_grid(lc_tiff, cats, "ID")
+
+  lu = zonal::execute_zonal_cat(lc_tiff, w = mod_500)
+  lu_dom = zonal::execute_zonal(lc_tiff, w = mod_500, FUN = "mode") %>%
+    setnames(c("ID", "dom_lc"))
 
   forest = lu %>%
     filter(value %in% c(1:5)) %>%
@@ -174,72 +193,28 @@ aggregate_lstm_params = function(gpkg,
     summarise(forest = sum(percentage, na.rm = TRUE)) %>%
     ungroup()
 
-  traits = left_join(traits, forest, by = "ID") %>%
+  traits = left_join(left_join(traits, forest, by = "ID"), lu_dom, by = "ID") %>%
     mutate(forest = ifelse(is.na(forest), 0, forest))
 
   ## GVF & LAI
 
   message("Generating and processing LAI and GVF data ...")
 
-  modis_mapping = read.csv('/Users/mjohnson/github/geogrids/inst/modis_lc.csv')
+  lai = filter(files, grepl("LAI/summary/cogs/", fullname)) %>%
+    filter(grepl("tif$", fullname)) %>%
+    filter(grepl("diff|max", fullname))
 
-  modis_mapping$ndvi_inf = c(0.81,0.86,0.88,
-                             0.90,0.87,0.86,
-                             0.86,0.75,0.76,
-                             0.74,0.86,0.84,
-                             0.86,0.82,NA,
-                             0.86,NA)
+  lai = zonal::execute_zonal(rast(lai$fullname), w = mod_500, FUN = "mean") %>%
+    setnames(c("ID", "lai_diff", "lai_max"))
 
-  ndvi_denom = terra::classify(lc_tiff, select(modis_mapping, is = Class, becomes = ndvi_inf)) - 0.05
+  gvf = filter(files, grepl("GVF/summary/cogs/", fullname)) %>%
+    filter(grepl("tif$", fullname)) %>%
+    filter(grepl("diff|max", fullname))
 
-  ########
-  ndvi = filter(files, grepl('MOD13A3.006/mosaics/landcover', fullname)) %>%
-    arrange(desc(fullname)) %>%
-    slice(1:(12*years)) %>%
-    arrange(fullname)
+  gvf = zonal::execute_zonal(rast(gvf$fullname), cats, "ID", FUN = "mean") %>%
+    setnames(c("ID", "gvf_diff", "gvf_max"))
 
-  # apply scaling factor
-  ndvi_rast = terra::rast(ndvi$fullname)
-  terra::window(ndvi_rast) <- terra::ext(ndvi_denom)
-  x = terra::clamp(ndvi_rast, lower = -2000, upper = 10000, values = FALSE)
-
-  ndvi_rast_processd = (x * 0.0001) - 0.5
-
-  indices<-rep(1:12, times=years)
-
-  gvf = ndvi_rast_processd / ndvi_denom
-  gvf = terra::clamp(gvf, lower = 0, upper = 1, values = FALSE)
-  gvf.mean <- terra::tapp(gvf, indices, fun = mean)
-  gvf.max = max(gvf.mean)
-  gvf.min = min(gvf.mean)
-
-  #########
-  lai_files = filter(files, grepl('MOD15A2H.006/monthly_means', fullname)) %>%
-    arrange(desc(fullname)) %>%
-    slice(1:(12*years)) %>%
-    arrange(fullname)
-
-  # apply scaling factor
-
-  lai_rast = terra::rast(lai_files$fullname) #* 0.1
-  terra::window(lai_rast) <- terra::ext(ndvi_denom)
-  lai_rast = lai_rast * 0.1
-  lai_rast = terra::clamp(lai_rast, lower = 0, upper = 100, values = FALSE)
-
-  lai.mean <- terra::tapp(lai_rast, indices, fun = mean)
-  lai.max = max(lai.mean)
-  lai.min = min(lai.mean)
-
-  gvf_lai_rast = rast(c(gvf_max = gvf.max,
-                        gvf_diff = gvf.max-gvf.min,
-                        lai_max = lai.max,
-                        lai_diff = lai.max-lai.min))
-
-  plot(gvf_lai_rast)
-  gvf_lai_stat = zonal::execute_zonal(gvf_lai_rast, cats, "ID") %>%
-    setnames(c("ID", names(gvf_lai_rast)))
-
-  traits = left_join(traits, gvf_lai_stat, by = "ID")
+  traits = left_join(left_join(traits, gvf, by = "ID"), lai, by = "ID")
 
   message("Writing output CSV to\n ", out_file)
 

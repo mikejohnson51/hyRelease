@@ -6,9 +6,9 @@
 \usage{
 get_waterbody_edges_terms(
   flowpaths,
-  wb_prefix = "nex-",
-  terminal_wb_prefix = "tnx-",
-  cutoff = 100000000
+  wb_prefix = "wb-",
+  terminal_wb_prefix = "twb-",
+  cutoff = 1e+08
 )
 }
 \arguments{

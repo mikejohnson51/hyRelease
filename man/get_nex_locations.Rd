@@ -4,7 +4,7 @@
 \alias{get_nex_locations}
 \title{Get Nexus Locations}
 \usage{
-get_nex_locations(fp)
+get_nex_locations(fp, term_cut)
 }
 \arguments{
 \item{fp}{a sf flowpath object}

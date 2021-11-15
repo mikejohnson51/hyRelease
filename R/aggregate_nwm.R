@@ -12,11 +12,31 @@
 #' @importFrom terra window
 #' @importFrom data.table fwrite
 
-map_vars = function(r, w, file = NULL, precision = 9, FUN = "mean", verbose = TRUE){
+map_vars = function(r, w, file = NULL, precision = 9,
+                    FUN = "mean", single_layer = FALSE,
+                    verbose = TRUE, prefix = NULL){
+
+
+  cols = names(r)
+
+  if(single_layer){
+    cols1 = grep('stag=1', cols, value = TRUE)
+    cols2 = cols[!grepl('stag=', cols)]
+    cols = c(cols1, cols2)
+    r = r[[cols]]
+  }
 
   cols = gsub("_Time=1", "", names(r))
+
   out = execute_zonal(r, w = w, FUN = FUN)
-  names(out) = c("ID",  cols)
+
+  if(is.null(prefix)){
+    names(out) = c("ID",  cols)
+  } else {
+    cols = paste0(prefix, cols)
+    names(out) = c("ID",  cols)
+  }
+
   out[,(cols) := round(.SD, precision), .SDcols = cols]
   terra::window(r) = NULL
 

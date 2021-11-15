@@ -22,3 +22,17 @@ build_release_directory = function(root = "" ){
               release_cw = release_cw
   ))
 }
+
+
+#' Write GeoJSON
+#' @param x sf object
+#' @param file file path
+#' @export
+#' @importFrom sf write_sf st_make_valid st_transform
+#'
+write_geojson <- function(x, file) {
+  names(x) <- tolower(names(x))
+  unlink(file)
+  write_sf(st_make_valid(st_transform(x, 4326)), file,
+           layer_options = c("ID_FIELD=id", "ID_TYPE=String"))
+}
