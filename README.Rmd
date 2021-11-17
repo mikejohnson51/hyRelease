@@ -9,50 +9,117 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
   fig.path = "man/figures/README-",
-  out.width = "100%"
+  out.width = "100%",
+  message = FALSE,
+  warning = FALSE
 )
 ```
 
 # hyRelease
 
-<!-- badges: start -->
-[![Dependencies](https://img.shields.io/badge/dependencies-12/93-red?style=flat)](#)
-[![R CMD Check](https://github.com/mikejohnson51/hyRelease/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/mikejohnson51/hyRelease/actions/workflows/R-CMD-check.yaml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://choosealicense.com/licenses/mit/)
-[![LifeCycle](man/figures/lifecycle/lifecycle-experimental.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
-<!-- badges: end -->
+`hyRelease` generates release hydrofabric artifacts for use in NextGen. The types of data in each release is actively being discussed [here](https://github.com/mikejohnson51/hyRelease/issues/4).
 
-The goal of hyRelease is to ...
+For now, we are generating releases for HUC01 units and CAMELS basins. These are stored in a Lynker Technologies AWS bucket. If you have credentials to these, data can be accessed in a number of ways. 
 
-## Installation
+A general approach (implemented in R, but general in nature) in the following way for an example CAMELS basin draining to NWIS gage `01435000`.
 
-You can install the released version of hyRelease from [CRAN](https://CRAN.R-project.org) with:
+### Set up Credentials
 
-``` r
-install.packages("hyRelease")
+In order to connect to S3, you need to authenticate. One way easiest method is to set environment variables in a working session like this:
+
+```{r, eval = FALSE}
+Sys.setenv("AWS_ACCESS_KEY_ID"     = "XXXXX",
+           "AWS_SECRET_ACCESS_KEY" = "XXXXX",
+           "AWS_DEFAULT_REGION"    = "us-east-2")
 ```
 
-## Example
+Or sourcing it from a private file:
 
-This is a basic example which shows you how to solve a common problem:
-
-```{r example}
-library(hyRelease)
-## basic example code
+```{r}
+source("private/aws.R")
 ```
 
-What is special about using `README.Rmd` instead of just `README.md`? You can include R chunks like so:
+Or setting them to the root of your system.
 
-```{r cars}
-summary(cars)
+However you authenticate, our resources are stored in `us-east-2` but your access key IDs and secrets are individual.
+
+## Getting data!
+
+For NGEN applications a number of file formats are needed including CSV, JSON, geoJSON, and gpkg. The first three of these are files that can be read directly, while a gpkg has some intereesting database capabilites.
+
+### Read files
+
+First, lets see what files are in our CAMEL "bucket". AWS does not have an explict folder structure so files are defined by a bucket, and can be reduced by the file prefix. So, lets first find the files in the CAMELS/gage_0143500 "directory".
+
+```{r}
+library(aws.s3)
+library(data.table)
+library(dplyr)
+
+rbindlist(get_bucket(bucket = "formulations-dev", prefix = "CAMELS/gage_01435000"))$Key
 ```
 
-You'll still need to render `README.Rmd` regularly, to keep `README.md` up-to-date. `devtools::build_readme()` is handy for this. You could also use GitHub Actions to re-render `README.Rmd` every time you push. An example workflow can be found here: <https://github.com/r-lib/actions/tree/master/examples>.
+Onec we know what files are avaialble, we can read any of them by selecting the correct driver:
 
-You can also embed plots, for example:
+#### CSV
 
-```{r pressure, echo = FALSE}
-plot(pressure)
+The pattern for reading files is identical regardless of format, the correct reader simply needs to be defined:
+
+```{r}
+csv_data = s3read_using(fread, object = "s3://formulations-dev/CAMELS/gage_01435000/parameters/nwm.csv")
+glimpse(csv_data)
 ```
 
-In that case, don't forget to commit and push the resulting figure files, so they display on GitHub and CRAN.
+#### JSON
+
+
+```{r}
+library(jsonlite)
+
+json_data = s3read_using(read_json, object = "s3://formulations-dev/CAMELS/gage_01435000/parameters/waterbody-params.json", simplifyVector = TRUE)
+glimpse(json_data[[1]])
+```
+
+### geoJSON
+```{r}
+library(sf)
+
+## READ from geoJSON
+cat_data = s3read_using(read_sf, object = "s3://formulations-dev/CAMELS/gage_01435000/spatial/catchment_data.geojson")
+plot(cat_data)
+```
+
+### Geopackage
+
+```{r}
+## READ from GPKG
+### find available layers
+s3read_using(st_layers, object = "s3://formulations-dev/CAMELS/gage_01435000/spatial/hydrofabric.gpkg")
+
+### call flowpaths layer
+fp_data = s3read_using(st_read, object = "s3://formulations-dev/CAMELS/gage_01435000/spatial/hydrofabric.gpkg", "flowpaths")
+
+
+### plot and add nexus layer
+{
+  plot(fp_data$geom)
+  plot(s3read_using(st_read, object = "s3://formulations-dev/CAMELS/gage_01435000/spatial/hydrofabric.gpkg", "nexus"), add = TRUE, pch = 16, col = "red")
+}
+```
+
+
+## Super cool!
+
+Because gpkgs are SQLite databases we can pass queries to the resource to extract exactly the features we need. For example, if we want to pull the just the junction nexus locations, we can do so.
+
+
+```{r}
+junction_nex =  sf::st_read(
+    dsn = "/vsis3/formulations-dev/hydrofabric/CONUS-hydrofabric/ngen-release/01a/2021-10-22/hydrofabric.gpkg",
+    query = "SELECT * FROM nexus WHERE nexus_type == 'junction'")
+
+
+plot(junction_nex$geom, pch = 16, cex = .1)
+```
+
+NOTE: The `/vsis3/` path prefix allows us to access the gpkg as a virtual dataset though GDALs [capabilites](https://gdal.org/user/virtual_file_systems.html)

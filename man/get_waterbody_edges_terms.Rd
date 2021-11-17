@@ -8,7 +8,7 @@ get_waterbody_edges_terms(
   flowpaths,
   wb_prefix = "wb-",
   terminal_wb_prefix = "twb-",
-  cutoff = 1e+08
+  cutoff = 100000000
 )
 }
 \arguments{

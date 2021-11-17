@@ -153,7 +153,7 @@ aggregate_nwm_params_reduce = function(gpkg,
     right_join(traits, by = 'ID')
   }
 
-  data.table::fwrite(traits_gw, out_file, row.names = FALSE)
+  data.table::fwrite(traits, out_file, row.names = FALSE)
 
 }
 

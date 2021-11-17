@@ -13,6 +13,7 @@ ternimal_wb_prefix  = "twb-"
 
 # Read from Jonathons repo
 
+which(gageIDs == '01435000')
 
 gageIDs  = read.csv(
   'https://raw.githubusercontent.com/jmframe/lstm/master/data/camels_basin_list_516.txt',
@@ -26,7 +27,8 @@ out_dir = '/Volumes/Transcend/ngen/CAMELS'
 #####################################################
 
 
-for (i in 213:516) {
+for (i in 410:516) {
+
   here = file.path(out_dir, paste0("gage_", gageIDs[i]))
 
   if (length(list.files(here, recursive = TRUE)) != 11) {
@@ -37,13 +39,13 @@ for (i in 213:516) {
       ID = gageIDs[i]
     )
 
-     agg = aggregate_by_thresholds(gpkg     = refactored_gpkg,
+    agg = aggregate_by_thresholds(gpkg     = refactored_gpkg,
                                   fl_name  = 'refactored_flowpaths',
                                   cat_name = 'refactored_catchments')
 
 
     agg$flowpaths = agg$flowpaths %>%
-      mutate(length_km == add_lengthkm(.)) %>%
+      mutate(length_km = add_lengthkm(.)) %>%
       length_average_routlink(
         rl_vars = c(
           "link",
@@ -213,4 +215,43 @@ for (i in 213:516) {
   }
 
   cat(crayon::blue("\nFinished:", i))
+}
+
+
+
+
+files = file.path(list.dirs(out_dir, recursive = F), "spatial/hydrofabric.gpkg")
+out_csv = file.path(list.dirs(out_dir, recursive = F), "parameters/nwm.csv")
+
+for(i in 298:length(files)){
+
+  tryCatch({
+  aggregate_nwm_params_reduce(
+    gpkg = files[i],
+    catchment_name = "catchments",
+    flowline_name  = "flowpaths",
+    nwm_dir = nwm_dir,
+    single_layer = TRUE,
+    out_file  = out_csv[i]
+  )
+  }, error = function(e){ NULL})
+  message(i)
+}
+
+nlcd_csv = file.path(list.dirs(out_dir, recursive = F), "parameters/nlcd.csv")
+
+for(i in 1:length(files)){
+
+  if(!file.exists(nlcd_csv[i])){
+    tryCatch({
+      aggregate_nlcd(
+        gpkg = files[i],
+        catchment_name = "catchments",
+        imperv_path    = '/Volumes/Transcend/ngen/nlcd_2019_impervious_l48_20210604/nlcd_2019_impervious_l48_20210604.img',
+        lc_path        = '/Volumes/Transcend/ngen/nlcd_2019_land_cover_l48_20210604/nlcd_2019_land_cover_l48_20210604.img',
+        out_file  = nlcd_csv[i]
+      )
+    }, error = function(e){ NULL})
+  }
+  message(i)
 }
