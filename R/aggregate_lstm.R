@@ -136,13 +136,13 @@ aggregate_lstm_params = function(gpkg,
     dplyr::pull(fullname) %>%
     terra::rast()
 
-  soils_w = zonal::weighting_grid(s$`clay-1m-percent`, cats, "ID")
+  soils_w = zonal::weighting_grid(s, cats, "ID")
 
   soils = zonal::execute_zonal(s, w = soils_w) %>%
-    setNames(c("ID", names(s))) %>%
-    mutate(`clay-1m-percent` = `clay-1m-percent` * 100,
-           `sand-1m-percent` = `sand-1m-percent` * 100,
-           `silt-1m-percent` = `silt-1m-percent` * 100,
+    setnames(c("ID", names(s))) %>%
+    mutate(`clay-1m-percent` = .data$`clay-1m-percent` * 100,
+           `sand-1m-percent` = .data$`sand-1m-percent` * 100,
+           `silt-1m-percent` = .data$`silt-1m-percent` * 100,
             rockdepm = rockdepm / 100,
            carbonate_rocks_frac = .data$GLIM_xx/ 100,
            GLIM_xx = NULL,
@@ -156,7 +156,6 @@ aggregate_lstm_params = function(gpkg,
     zonal::execute_zonal(cats, "ID") %>%
     setnames(c("ID", "soil_depth_pelletier")) %>%
     left_join(soils, by = "ID")
-
 
   traits = left_join(traits, soils, by = "ID")
 

@@ -11,21 +11,13 @@ terminal_nexus_prefix = "tnx-"
 ternimal_wb_prefix  = "twb-"
 
 
-# Read from Jonathons repo
-
-which(gageIDs == '01435000')
-
-gageIDs  = read.csv(
-  'https://raw.githubusercontent.com/jmframe/lstm/master/data/camels_basin_list_516.txt',
-  header = FALSE
-) %>%
+# Read from Jonathans repo
+gageIDs  = read.csv('https://raw.githubusercontent.com/jmframe/lstm/master/data/camels_basin_list_516.txt', header = FALSE) %>%
   mutate(gageID = sprintf("%08d", V1)) %>%
   pull(gageID)
 
 out_dir = '/Volumes/Transcend/ngen/CAMELS'
-
 #####################################################
-
 
 for (i in 410:516) {
 
@@ -47,27 +39,11 @@ for (i in 410:516) {
     agg$flowpaths = agg$flowpaths %>%
       mutate(length_km = add_lengthkm(.)) %>%
       length_average_routlink(
-        rl_vars = c(
-          "link",
-          "Qi",
-          "MusK",
-          "MusX",
-          "n",
-          "So",
-          "ChSlp",
-          "BtmWdth",
-          "time",
-          "Kchan",
-          "nCC",
-          "TopWdthCC",
-          "TopWdth"
-        ),
-        rl_path  = file.path(nwm_dir, "RouteLink_CONUS.nc")
-      )
-
+        rl_vars = c("link", "Qi", "MusK", "MusX", "n", "So", "ChSlp", "BtmWdth",
+                    "time", "Kchan", "nCC", "TopWdthCC", "TopWdth"),
+        rl_path  = file.path(nwm_dir, "RouteLink_CONUS.nc"))
 
     ########## GRAPH DATA
-
     catchment_edge_list <- get_catchment_edges_terms(agg$flowpaths)
     fp_edge_list        <- get_catchment_edges_terms(agg$flowpaths, catchment_prefix = waterbody_prefix)
     waterbody_edge_list <- get_waterbody_edges_terms(agg$flowpaths)
@@ -219,39 +195,39 @@ for (i in 410:516) {
 
 
 
-
-files = file.path(list.dirs(out_dir, recursive = F), "spatial/hydrofabric.gpkg")
-out_csv = file.path(list.dirs(out_dir, recursive = F), "parameters/nwm.csv")
-
-for(i in 298:length(files)){
-
-  tryCatch({
-  aggregate_nwm_params_reduce(
-    gpkg = files[i],
-    catchment_name = "catchments",
-    flowline_name  = "flowpaths",
-    nwm_dir = nwm_dir,
-    single_layer = TRUE,
-    out_file  = out_csv[i]
-  )
-  }, error = function(e){ NULL})
-  message(i)
-}
-
-nlcd_csv = file.path(list.dirs(out_dir, recursive = F), "parameters/nlcd.csv")
-
-for(i in 1:length(files)){
-
-  if(!file.exists(nlcd_csv[i])){
-    tryCatch({
-      aggregate_nlcd(
-        gpkg = files[i],
-        catchment_name = "catchments",
-        imperv_path    = '/Volumes/Transcend/ngen/nlcd_2019_impervious_l48_20210604/nlcd_2019_impervious_l48_20210604.img',
-        lc_path        = '/Volumes/Transcend/ngen/nlcd_2019_land_cover_l48_20210604/nlcd_2019_land_cover_l48_20210604.img',
-        out_file  = nlcd_csv[i]
-      )
-    }, error = function(e){ NULL})
-  }
-  message(i)
-}
+#
+# files = file.path(list.dirs(out_dir, recursive = F), "spatial/hydrofabric.gpkg")
+# out_csv = file.path(list.dirs(out_dir, recursive = F), "parameters/nwm.csv")
+#
+# for(i in 298:length(files)){
+#
+#   tryCatch({
+#   aggregate_nwm_params_reduce(
+#     gpkg = files[i],
+#     catchment_name = "catchments",
+#     flowline_name  = "flowpaths",
+#     nwm_dir = nwm_dir,
+#     single_layer = TRUE,
+#     out_file  = out_csv[i]
+#   )
+#   }, error = function(e){ NULL})
+#   message(i)
+# }
+#
+# nlcd_csv = file.path(list.dirs(out_dir, recursive = F), "parameters/nlcd.csv")
+#
+# for(i in 1:length(files)){
+#
+#   if(!file.exists(nlcd_csv[i])){
+#     tryCatch({
+#       aggregate_nlcd(
+#         gpkg = files[i],
+#         catchment_name = "catchments",
+#         imperv_path    = '/Volumes/Transcend/ngen/nlcd_2019_impervious_l48_20210604/nlcd_2019_impervious_l48_20210604.img',
+#         lc_path        = '/Volumes/Transcend/ngen/nlcd_2019_land_cover_l48_20210604/nlcd_2019_land_cover_l48_20210604.img',
+#         out_file  = nlcd_csv[i]
+#       )
+#     }, error = function(e){ NULL})
+#   }
+#   message(i)
+# }

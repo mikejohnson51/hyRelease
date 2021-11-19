@@ -36,6 +36,8 @@ aggregate_nwm_params_reduce = function(gpkg,
                                 out_file = NULL){
 
 
+  .SD <- NULL
+
   template = list(ext = ext(-2303999.62876143, 2304000.37123857, -1920000.70008381, 1919999.29991619),
                   crs = 'PROJCS["Sphere_Lambert_Conformal_Conic",GEOGCS["GCS_Sphere",DATUM["D_Sphere",SPHEROID["Sphere",6370000.0,0.0]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Lambert_Conformal_Conic"],PARAMETER["false_easting",0.0],PARAMETER["false_northing",0.0],PARAMETER["central_meridian",-97.0],PARAMETER["standard_parallel_1",30.0],PARAMETER["standard_parallel_2",60.0],PARAMETER["latitude_of_origin",40.000008],UNIT["Meter",1.0]];-35691800 -29075200 126180232.640845;-100000 10000;-100000 10000;0.001;0.001;0.001;IsHighPrecision')
 
@@ -115,40 +117,41 @@ aggregate_nwm_params_reduce = function(gpkg,
       mutate(ID = ID, comid = as.integer(comid)) %>%
       filter(!duplicated(.))
 
-  gwnc = RNetCDF::open.nc(file.path(nwm_dir, 'GWBUCKPARM_CONUS_FullRouting.nc'))
+    gwnc = RNetCDF::open.nc(file.path(nwm_dir, 'GWBUCKPARM_CONUS_FullRouting.nc'))
 
-  vars      = c("Area_sqkm", "ComID", "Coeff",  "Zmax")
-  vars_mode = c("Area_sqkm", "ComID", "Expon")
+    vars      = c("Area_sqkm", "ComID", "Coeff",  "Zmax")
+    vars_mode = c("Area_sqkm", "ComID", "Expon")
 
-  gwparams_means = suppressMessages({
-    xx = lapply(vars, function(x) RNetCDF::var.get.nc(gwnc, x)) %>%
-      bind_cols() %>%
-      setnames(vars) %>%
-      rename(comid = ComID) %>%
-      mutate(comid = as.integer(comid)) %>%
-      inner_join(select(crosswalk, ID, comid), by = 'comid') %>%
-      filter(complete.cases(.)) %>%
-      filter(!duplicated(.)) %>%
-      group_by(ID) %>%
-      summarise(across(everything(), ~ round(
-        weighted.mean(.x,w = .data$Area_sqkm, na.rm = TRUE), precision))) %>%
-      select(-comid, -Area_sqkm)
-  })
+    gwparams_means = suppressMessages({
+      lapply(vars, function(x) RNetCDF::var.get.nc(gwnc, x)) %>%
+        bind_cols() %>%
+        setnames(vars) %>%
+        rename(comid = .data$ComID) %>%
+        mutate(comid = as.integer(.data$comid)) %>%
+        inner_join(select(crosswalk, .data$ID, .data$comid), by = 'comid') %>%
+        filter(complete.cases(.)) %>%
+        filter(!duplicated(.)) %>%
+        group_by(.data$ID) %>%
+        summarise(across(everything(), ~ round(
+          weighted.mean(.x,w = .data$Area_sqkm, na.rm = TRUE), precision))) %>%
+        select(-.data$comid, -.data$Area_sqkm)
+    })
 
 
-  gwparams_mode = suppressMessages({
-   xx =  lapply(vars_mode, function(x) RNetCDF::var.get.nc(gwnc, x)) %>%
-      bind_cols() %>%
-      setnames(vars_mode) %>%
-      rename(comid = ComID) %>%
-       inner_join(select(crosswalk, ID, comid), by = 'comid') %>%
-       filter(complete.cases(.)) %>%
-       filter(!duplicated(.)) %>%
-      group_by(ID) %>%
-      summarise(Expon = zonal::getmode(floor(Expon)))
-  })
+    gwparams_mode = suppressMessages({
+     lapply(vars_mode, function(x) RNetCDF::var.get.nc(gwnc, x)) %>%
+        bind_cols() %>%
+        setnames(vars_mode) %>%
+        rename(comid = .data$ComID) %>%
+         inner_join(select(crosswalk, .data$ID, .data$comid), by = 'comid') %>%
+         filter(complete.cases(.)) %>%
+         filter(!duplicated(.)) %>%
+        group_by(.data$ID) %>%
+        summarise(Expon = zonal::getmode(floor(.data$Expon)))
+    })
 
   traits = left_join(gwparams_means, gwparams_mode, by = 'ID') %>%
+    mutate(ID = gsub("wb-", "cat-", .data$ID)) %>%
     setnames(c('ID', paste0('gw_', names(.)[-1]))) %>%
     right_join(traits, by = 'ID')
   }
