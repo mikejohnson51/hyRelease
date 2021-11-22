@@ -2,14 +2,15 @@
 % Please edit documentation in R/reservoir_mappings.R
 \name{build_lake_params}
 \alias{build_lake_params}
-\title{Build Lake Parms for NGen}
+\title{Build Lake Params for NGen}
 \usage{
 build_lake_params(
   gpkg,
   catchment_name,
   flowline_name,
   waterbody_gpkg = "/Users/mjohnson/Downloads/nhdplus_waterbodies.gpkg",
-  nwm_dir
+  nwm_dir,
+  outfile = NULL
 )
 }
 \arguments{
@@ -19,9 +20,11 @@ build_lake_params(
 
 \item{flowline_name}{the layer name of the flowpath units}
 
-\item{waterbody_gpkg}{geopackage containing CONUS NHD waterboides}
+\item{waterbody_gpkg}{geopackage containing CONUS NHD waterbodies}
 
 \item{nwm_dir}{a directory to NWM files}
+
+\item{outfile}{optional. Path to JSON file to write outputs using \code{write_lakes_json}}
 }
 \description{
 Map the NWM LAKEPARM_CONUS.nc file to an aggregated NGen Network
