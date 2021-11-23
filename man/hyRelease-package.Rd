@@ -4,7 +4,7 @@
 \name{hyRelease-package}
 \alias{hyRelease}
 \alias{hyRelease-package}
-\title{hyRelease: What the Package Does (One Line, Title Case)}
+\title{hyRelease: Build NGen Hydrofabric Releases}
 \description{
 What the package does (one paragraph).
 }
@@ -17,7 +17,7 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: First Last \email{first.last@example.com} (\href{https://orcid.org/YOUR-ORCID-ID}{ORCID})
+\strong{Maintainer}: Mike Johnson \email{mikecp11@gmail.com} (\href{https://orcid.org/YOUR-ORCID-ID}{ORCID})
 
 }
 \keyword{internal}

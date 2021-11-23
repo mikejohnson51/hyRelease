@@ -1,8 +1,8 @@
 Package: hyRelease
-Title: What the Package Does (One Line, Title Case)
+Title: Build NGen Hydrofabric Releases
 Version: 0.0.0.9000
 Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"),
+    person("Mike", "Johnson", , "mikecp11@gmail.com", role = c("aut", "cre"),
            comment = c(ORCID = "YOUR-ORCID-ID"))
 Description: What the package does (one paragraph).
 License: MIT + file LICENSE
@@ -26,5 +26,11 @@ Imports:
     terra,
     tidyr,
     zonal
+Remotes: 
+   mikejohnson51/geogrids,
+   mikejohnson51/hyAggregate,
+   mikejohnson51/zonal
+   USGS-R/nhdplusTools,
+   dblodgett-usgs/hyRefactor
 URL: https://github.com/mikejohnson51/hyRelease
 BugReports: https://github.com/mikejohnson51/hyRelease/issues

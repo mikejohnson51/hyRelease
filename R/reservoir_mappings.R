@@ -1,3 +1,33 @@
+add_slope = function(flowpaths = agg$flowpaths){
+
+  flowpaths = flowpaths %>%
+    hyRefactor::add_lengthmap(length_table = nhdplusTools::get_vaa(c("lengthkm")))
+
+  net_map  <- dplyr::select(st_drop_geometry(flowpaths), ID, lengthMap) %>%
+    mutate(comid = strsplit(.data$lengthMap, ",")) %>%
+    tidyr::unnest(cols = comid) %>%
+    mutate(full_comids = floor(as.numeric(comid)),
+           w = 10 * (as.numeric(comid) - full_comids),
+           comid = NULL)
+
+  df = nhdplusTools::get_vaa(c('lengthkm', "slope"))
+
+  df = df %>%
+    right_join(net_map, by = c('comid' = 'full_comids')) %>%
+    select(-.data$lengthMap) %>%
+    mutate(w = w * lengthkm) %>%
+    group_by(ID) %>%
+    summarise(across(everything(), ~ round(
+      weighted.mean(x = .,
+                    w = w,
+                    na.rm = TRUE), 8))) %>%
+    dplyr::select(-comid, -lengthkm, -w)
+
+  left_join(flowpaths, df, by = "ID")
+}
+
+
+
 #' @title NetCDF Variable Names from a path
 #' @description Given a path to a NetCDF file, list the variables
 #' @param path a path to a NetCDF file
@@ -34,8 +64,8 @@ var_names = function(path) {
 #' @export
 
 build_lake_params = function(gpkg,
-                             catchment_name,
                              flowline_name,
+                             flowpaths = NULL,
                              waterbody_gpkg = '/Users/mjohnson/Downloads/nhdplus_waterbodies.gpkg',
                              nwm_dir,
                              outfile = NULL) {
@@ -66,7 +96,12 @@ build_lake_params = function(gpkg,
 
   order = nhdplusTools::get_vaa("hydroseq")
 
-  fl = read_sf(gpkg, 'flowpaths')
+  if(!is.null(flowpaths)){
+    fl = flowpaths
+  } else {
+    fl = read_sf(gpkg, 'flowpaths')
+  }
+
 
   flowpaths = fl %>%
     st_drop_geometry() %>%
@@ -126,58 +161,6 @@ build_lake_params = function(gpkg,
   }
 }
 
-#' Write lake params to JSON
-#' @param df output of `build_lake_params`
-#' @param outfile file path to write to
-#' @return file path
-#' @export
-#' @importFrom dplyr left_join select distinct
-#' @importFrom jsonlite write_json
-
-write_lakes_json = function(df, outfile){
-
-  ind = data.frame(lake_id = unique(df$lake_id)) %>%
-    left_join(select(df, lake_id, outletId)) %>%
-    dplyr::distinct()
-
-  lake_crosswalk_list <- lapply(unique(df$lake_id),
-                                function(x, df) {
-                                  df_sub <- df[df$lake_id == x,]
-                                  out <-
-                                    list(member_wbs = df_sub$ID)
-                                  out$partial_length_percent <-df_sub$partial_length_percent
-
-                                  out$lake_id    <- unique(df_sub$lake_id)
-                                  out$Dam_Length <- as.numeric(unique(df_sub$Dam_Length))
-                                  out$LkMxE      <- as.numeric(unique(df_sub$LkMxE))
-                                  out$OrificeE   <- as.numeric(unique(df_sub$OrificeE))
-                                  out$WeirE      <- as.numeric(unique(df_sub$WeirE))
-                                  out$LkArea     <- as.numeric(unique(df_sub$LkArea))
-                                  out$WeirC      <- as.numeric(unique(df_sub$WeirC))
-                                  out$WeirL      <- as.numeric(unique(df_sub$WeirL))
-                                  out$OrificeC   <- as.numeric(unique(df_sub$OrificeC))
-                                  out$OrificeA   <- as.numeric(unique(df_sub$OrificeA))
-                                  out$lat        <- as.numeric(unique(df_sub$lat))
-                                  out$lon        <- as.numeric(unique(df_sub$lon))
-                                  out$time       <- as.numeric(unique(df_sub$time))
-
-                                  out$ascendingIndex <- as.numeric(unique(df_sub$ascendingIndex))
-                                  out$ifd <- as.numeric(unique(df_sub$ifd))
-
-                                  out
-
-                                }, df = df)
-
-
-  names(lake_crosswalk_list) <- ind$outletId
-
-  jsonlite::write_json(
-    lake_crosswalk_list,
-    outfile,
-    pretty = TRUE,
-    auto_unbox = TRUE
-  )
-}
 
 #' Quantify area of waterbody/land per catchment
 #' Ngen needs a land area percentages to drive rainfall-runoff processes. Provided a Ngen geopackage,
@@ -190,7 +173,7 @@ write_lakes_json = function(df, outfile){
 #' @export
 #' @importFrom RNetCDF open.nc var.get.nc
 #' @importFrom data.table setnames
-#' @importFrom dplyr filter mutate select group_by summarise ungroup ungroup right_join
+#' @importFrom dplyr filter mutate select group_by summarise ungroup ungroup right_join everything
 #' @importFrom sf read_sf st_transform st_bbox st_as_sfc st_as_text st_intersection st_drop_geometry st_as_sf
 #' @importFrom hyRefactor add_areasqkm
 #' @importFrom nhdplusTools rename_geometry
@@ -198,12 +181,16 @@ write_lakes_json = function(df, outfile){
 catchment_waterbody_interaction = function(
     gpkg           = '/Users/mjohnson/Downloads/2021-10-28/spatial/hydrofabric.gpkg',
     catchment_name = "catchments",
-    waterbody_gpkg = '/Users/mjohnson/Downloads/nhdplus_waterbodies.gpkg',
-    nwm_dir        = "/Users/mjohnson/Downloads/"
-){
+    catchments     = NULL,
+    waterbody_gpkg = NULL,
+    nwm_dir        = NULL){
 
-  cats = read_sf(gpkg, catchment_name) %>%
-    st_transform(5070)
+  if(is.null(catchments)){
+    cats = read_sf(gpkg, catchment_name) %>%
+      st_transform(5070)
+  } else {
+    cats = catchments
+  }
 
   wkt = st_bbox(cats) %>%
     st_as_sfc() %>%
@@ -211,8 +198,7 @@ catchment_waterbody_interaction = function(
     st_as_text()
 
   wbs = read_sf(waterbody_gpkg, wkt_filter = wkt) %>%
-    st_transform(5070)  %>%
-    mutate(geom_area = hyRefactor::add_areasqkm(.))
+    st_transform(5070)
 
   rl   = file.path(nwm_dir, 'RouteLink_CONUS.nc')
 
@@ -236,14 +222,14 @@ catchment_waterbody_interaction = function(
         dplyr::mutate(wb_area_sqkm = hyRefactor::add_areasqkm(.)) %>%
         st_drop_geometry() %>%
         dplyr::group_by(ID) %>%
-        dplyr::summarise(wb_area_sqkm = sum(wb_area_sqkm)) %>%
+        dplyr::summarise(wb_area_sqkm = sum(.data$wb_area_sqkm)) %>%
         dplyr::ungroup() %>%
-        right_join(cats) %>%
-    mutate(wb_area = ifelse(is.na(wb_area_sqkm), 0, wb_area_sqkm),
-           land_area_sqkm = area_sqkm -wb_area_sqkm) %>%
+        right_join(cats, by = "ID") %>%
+    mutate(wb_area_sqkm = ifelse(is.na(.data$wb_area_sqkm), 0, .data$wb_area_sqkm),
+           land_area_sqkm = .data$area_sqkm - .data$wb_area_sqkm) %>%
     st_as_sf() %>%
     nhdplusTools::rename_geometry("geometry") %>%
-    select(.data$ID, .data$toID, .data$area_sqkm, .data$land_area_sqkm, .data$wb_area_sqkm)
+    select(.data$ID, .data$area_sqkm, .data$land_area_sqkm, .data$wb_area_sqkm, dplyr::everything())
   })
 }
 

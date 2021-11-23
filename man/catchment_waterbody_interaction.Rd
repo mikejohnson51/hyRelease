@@ -9,8 +9,9 @@ and NHD waterbody geopackage, these are computed.}
 catchment_waterbody_interaction(
   gpkg = "/Users/mjohnson/Downloads/2021-10-28/spatial/hydrofabric.gpkg",
   catchment_name = "catchments",
-  waterbody_gpkg = "/Users/mjohnson/Downloads/nhdplus_waterbodies.gpkg",
-  nwm_dir = "/Users/mjohnson/Downloads/"
+  catchments = NULL,
+  waterbody_gpkg = NULL,
+  nwm_dir = NULL
 )
 }
 \arguments{
