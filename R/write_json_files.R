@@ -12,6 +12,9 @@ write_lakes_json = function(df, outfile){
     left_join(select(df, lake_id, outletId)) %>%
     dplyr::distinct()
 
+
+  filter(df, outletId == 'wb-16278.1')
+
   lake_crosswalk_list <- lapply(unique(df$lake_id),
                                 function(x, df) {
                                   df_sub <- df[df$lake_id == x,]
@@ -42,6 +45,10 @@ write_lakes_json = function(df, outfile){
 
 
   names(lake_crosswalk_list) <- ind$outletId
+
+
+  grep('wb-16278.1', names(lake_crosswalk_list), value = TRUE)
+
 
   jsonlite::write_json(
     lake_crosswalk_list,

@@ -26,8 +26,6 @@ add_slope = function(flowpaths = agg$flowpaths){
   left_join(flowpaths, df, by = "ID")
 }
 
-
-
 #' @title NetCDF Variable Names from a path
 #' @description Given a path to a NetCDF file, list the variables
 #' @param path a path to a NetCDF file

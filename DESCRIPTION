@@ -29,7 +29,7 @@ Imports:
 Remotes: 
    mikejohnson51/geogrids,
    mikejohnson51/hyAggregate,
-   mikejohnson51/zonal
+   mikejohnson51/zonal,
    USGS-R/nhdplusTools,
    dblodgett-usgs/hyRefactor
 URL: https://github.com/mikejohnson51/hyRelease
