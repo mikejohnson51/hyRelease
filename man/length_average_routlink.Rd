@@ -4,7 +4,12 @@
 \alias{length_average_routlink}
 \title{Assign Length Weighted Flowpath Attributes from Routelink file}
 \usage{
-length_average_routlink(flowpaths, rl_vars, rl_path)
+length_average_routlink(
+  flowpaths,
+  rl_vars = c("link", "Qi", "MusK", "MusX", "n", "So", "ChSlp", "BtmWdth", "time",
+    "Kchan", "nCC", "TopWdthCC", "TopWdth"),
+  rl_path
+)
 }
 \arguments{
 \item{flowpaths}{flowpaths with a\code{member_COMID} attribute}

@@ -52,7 +52,7 @@ aggregate_nwm_params_reduce = function(gpkg,
   ### soil_properties
   soil_mode_var = "bexp"
   soil_gm_var   = c("dksat", "psisat")
-  soil_mean_var = c("slope", "smcmax", "smcwlt")
+  soil_mean_var = c("slope", "smcmax", "smcwlt", "refkdt")
 
   x1 = map_vars(r =  floor(soils[[grepl(soil_mode_var, names(soils))]]),
            w = nwm_w_1000m,
@@ -98,12 +98,12 @@ aggregate_nwm_params_reduce = function(gpkg,
 
   ### FULL DOM
 
-  fulldom = rast(file.path(nwm_dir, 'Fulldom_CONUS_FullRouting.nc'), subds = c('LKSATFAC'))
-  cols = paste0("fd_", names(fulldom))
-  fulldom = execute_zonal(fulldom, geom = cats, "ID", FUN  = "mean")
-  names(fulldom) = c("ID", cols)
-  fulldom[,(cols) := round(.SD, precision), .SDcols=cols]
-  traits = left_join(traits, fulldom, by = 'ID')
+  # fulldom = rast(file.path(nwm_dir, 'Fulldom_CONUS_FullRouting.nc'), subds = c('LKSATFAC'))
+  # cols = paste0("fd_", names(fulldom))
+  # fulldom = execute_zonal(fulldom, geom = cats, "ID", FUN  = "mean")
+  # names(fulldom) = c("ID", cols)
+  # fulldom[,(cols) := round(.SD, precision), .SDcols=cols]
+  # traits = left_join(traits, fulldom, by = 'ID')
 
   ####
 

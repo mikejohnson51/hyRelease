@@ -11,13 +11,13 @@
 #' @importFrom geogrids geo_cache_list geogrid_warp make_grid
 #' @importFrom sf read_sf st_area
 #' @importFrom dplyr  `%>%` filter arrange desc slice arrange pull left_join rename mutate group_by summarise ungroup
-#' @importFrom zonal weighting_grid execute_zonal execute_zonal_cat
+#' @importFrom zonal weighting_grid execute_zonal
 #' @importFrom foreach `%dopar%` foreach
 #' @importFrom doMC registerDoMC
 #' @importFrom data.table setnames data.table as.data.table fwrite `:=`
 #' @importFrom terra rast terrain classify window ext
 
-aggregate_lstm_params = function(gpkg,
+aggregate_basin_attributes = function(gpkg,
                                  catchment_name,
                                  geo_dir,
                                  years = 3,
@@ -77,7 +77,7 @@ aggregate_lstm_params = function(gpkg,
 
   snow_tif = geogrid_warp(file = jennings$fullname, grid = make_grid(tm$fullname[1]), r = "bilinear")
 
-  jen = zonal::execute_zonal(file = snow_tif, w = gridmet_w)
+  jen = zonal::execute_zonal(file = snow_tif, w = gridmet_w, join = FALSE)
   jen$kelvins = jen$V1 + 273.15
 
   snow_day = tavg[, .SD  < jen$kelvins]
@@ -122,7 +122,7 @@ aggregate_lstm_params = function(gpkg,
   #   setnames(c("ID", "elevation", "slope"))
 
   t = c(DEM, 1000*tan(terrain(DEM, v = "slope", unit = "radians")))
-  terrain = zonal::execute_zonal(t, cats, 'ID') %>%
+  terrain = zonal::execute_zonal(t, cats, 'ID', join = FALSE) %>%
     setnames(c("ID", "elevation", "slope"))
 
   terrain$areasqkm = as.numeric(st_area(cats)/1e6)
@@ -138,7 +138,7 @@ aggregate_lstm_params = function(gpkg,
 
   soils_w = zonal::weighting_grid(s, cats, "ID")
 
-  soils = zonal::execute_zonal(s, w = soils_w) %>%
+  soils = zonal::execute_zonal(s, w = soils_w, join = FALSE) %>%
     setnames(c("ID", names(s))) %>%
     mutate(`clay-1m-percent` = .data$`clay-1m-percent` * 100,
            `sand-1m-percent` = .data$`sand-1m-percent` * 100,
@@ -153,7 +153,7 @@ aggregate_lstm_params = function(gpkg,
 
 
   soils = filter(files, grepl('average_soil_and_sedimentary-deposit_thickness.tif', fullname))$fullname %>%
-    zonal::execute_zonal(cats, "ID") %>%
+    zonal::execute_zonal(cats, "ID", join = FALSE) %>%
     setnames(c("ID", "soil_depth_pelletier")) %>%
     left_join(soils, by = "ID")
 
@@ -166,7 +166,7 @@ aggregate_lstm_params = function(gpkg,
     dplyr::pull(.data$fullname) %>%
     terra::rast()
 
-  energy = zonal::execute_zonal(energy, w = gridmet_w) %>%
+  energy = zonal::execute_zonal(energy, w = gridmet_w, join = FALSE) %>%
     setnames(c("ID", "aridity", "pet_mean")) %>%
     mutate(pet_mean = .data$pet_mean  *.1)
 
@@ -182,8 +182,9 @@ aggregate_lstm_params = function(gpkg,
 
   mod_500 = zonal::weighting_grid(lc_tiff, cats, "ID")
 
-  lu = zonal::execute_zonal_cat(lc_tiff, w = mod_500)
-  lu_dom = zonal::execute_zonal(lc_tiff, w = mod_500, FUN = "mode") %>%
+  lu = zonal::execute_zonal(lc_tiff, w = mod_500, FUN = "freq", join = FALSE)
+
+  lu_dom = zonal::execute_zonal(lc_tiff, w = mod_500, FUN = "mode", join = FALSE) %>%
     setnames(c("ID", "dom_lc"))
 
   forest = lu %>%
@@ -203,14 +204,14 @@ aggregate_lstm_params = function(gpkg,
     filter(grepl("tif$", fullname)) %>%
     filter(grepl("diff|max", fullname))
 
-  lai = zonal::execute_zonal(rast(lai$fullname), w = mod_500, FUN = "mean") %>%
+  lai = zonal::execute_zonal(rast(lai$fullname), w = mod_500, FUN = "mean", join = FALSE) %>%
     setnames(c("ID", "lai_diff", "lai_max"))
 
   gvf = filter(files, grepl("GVF/summary/cogs/", fullname)) %>%
     filter(grepl("tif$", fullname)) %>%
     filter(grepl("diff|max", fullname))
 
-  gvf = zonal::execute_zonal(rast(gvf$fullname), cats, "ID", FUN = "mean") %>%
+  gvf = zonal::execute_zonal(rast(gvf$fullname), cats, "ID", FUN = "mean", join = FALSE) %>%
     setnames(c("ID", "gvf_diff", "gvf_max"))
 
   traits = left_join(left_join(traits, gvf, by = "ID"), lai, by = "ID")

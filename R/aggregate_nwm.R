@@ -28,7 +28,7 @@ map_vars = function(r, w, file = NULL, precision = 9,
 
   cols = gsub("_Time=1", "", names(r))
 
-  out = execute_zonal(r, w = w, FUN = FUN)
+  out = execute_zonal(r, w = w, FUN = FUN, join = FALSE)
 
   if(is.null(prefix)){
     names(out) = c("ID",  cols)

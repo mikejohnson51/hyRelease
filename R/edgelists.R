@@ -157,7 +157,7 @@ get_catchment_data = function(catchment, catchment_edge_list, catchment_prefix =
 }
 
 
-get_flowpath_data = function(fline, catchment_edge_list, catchment_prefix = "cat-") {
+get_flowpath_data = function(fline, catchment_edge_list, waterbody_prefix = "wb-", catchment_prefix = "cat-") {
 
   if("main_id" %in% names(fline)){
     fline = rename(fline, LevelPathID = main_id)
@@ -165,10 +165,11 @@ get_flowpath_data = function(fline, catchment_edge_list, catchment_prefix = "cat
 
   select(fline,
          ID = .data$ID,
-         length_km = .data$length_km,
+         lengthkm = .data$lengthkm,
          slope_percent = .data$slope,
          main_id = .data$LevelPathID,
          member_COMID = .data$member_COMID) %>%
-    mutate(ID = paste0(catchment_prefix, .data$ID)) %>%
-    left_join(catchment_edge_list, by = "ID")
+    mutate(ID = paste0(waterbody_prefix, .data$ID)) %>%
+    mutate(realized_catchment = gsub(waterbody_prefix, catchment_prefix, ID)) %>%
+    left_join(catchment_edge_list, by = c("realized_catchment" = "ID"))
 }

@@ -8,7 +8,7 @@
 #' @return NULL
 #' @export
 #' @importFrom sf read_sf
-#' @importFrom zonal weighting_grid execute_zonal execute_zonal_cat
+#' @importFrom zonal weighting_grid execute_zonal
 #' @importFrom dplyr full_join mutate
 #' @importFrom data.table fwrite setnames
 #' @importFrom tidyr pivot_wider
@@ -34,10 +34,10 @@ aggregate_nlcd = function(gpkg,
   cats = sf::read_sf(gpkg, catchment_name)
   lc_w = zonal::weighting_grid(imperv_path, cats, "ID" )
 
-  xx = zonal::execute_zonal(file = imperv_path, w = lc_w) %>%
+  xx = zonal::execute_zonal(file = imperv_path, w = lc_w, join = FALSE) %>%
     setnames(c("ID", "impervious_percentage"))
 
-  zz =  zonal::execute_zonal_cat(file = lc_path, w = lc_w) %>%
+  zz =  zonal::execute_zonal(file = lc_path, w = lc_w, FUN = "freq", join = FALSE) %>%
     mutate(value = paste0("percent_nlcd_lc_", value),
             percentage = 100 * percentage) %>%
     tidyr::pivot_wider(id_cols = "ID", names_from = "value", values_from = "percentage")

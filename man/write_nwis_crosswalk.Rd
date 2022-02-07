@@ -9,10 +9,9 @@ The output data as written as JSON to the supplied outfile path.}
 \usage{
 write_nwis_crosswalk(
   gpkg,
-  flowline_name,
-  flowpaths = NULL,
   fl_name = "flowpaths",
-  nwm_dir = "/Users/mjohnson/Downloads/",
+  flowpaths = NULL,
+  nwm_dir = "./",
   outfile
 )
 }

@@ -44,6 +44,25 @@ var_names = function(path) {
 }
 
 
+# sf = read_sf('/Users/mjohnson/Downloads/nhdplus_waterbodies.gpkg')
+# rl_vars = c("link", "NHDWaterbodyComID")
+#
+# lake_nc = RNetCDF::open.nc(lake)
+# df2 = data.frame(do.call(cbind, lapply(vars, function(x)
+#   RNetCDF::var.get.nc(lake_nc, x)))) %>%
+#   setnames(vars) %>%
+#   filter(lake_id > 0) |>
+#   mutate(lake_id = as.numeric(lake_id))
+#
+# lakes = st_as_sf(df2, coords = c("lon", "lat"), crs = 4326)
+#
+# inner_join(df2, sf, by = c("lake_id" = "COMID"))
+#
+# dim(df2)
+#
+# nwm_lakes = sf |>
+#   filter(COMID %in% df2$lake_id)
+
 #' @title Build Lake Params for NGen
 #' @description Map the NWM LAKEPARM_CONUS.nc file to an aggregated NGen Network
 #' @param gpkg a geopackage with aggregation units
@@ -61,9 +80,7 @@ var_names = function(path) {
 #' @importFrom tidyr unnest
 #' @export
 
-build_lake_params = function(gpkg,
-                             flowline_name,
-                             flowpaths = NULL,
+build_lake_params = function(flowpaths,
                              waterbody_gpkg = '/Users/mjohnson/Downloads/nhdplus_waterbodies.gpkg',
                              nwm_dir,
                              outfile = NULL) {
@@ -100,7 +117,6 @@ build_lake_params = function(gpkg,
     fl = read_sf(gpkg, 'flowpaths')
   }
 
-
   flowpaths = fl %>%
     st_drop_geometry() %>%
     select(.data$ID, .data$member_COMID) %>%
@@ -109,7 +125,7 @@ build_lake_params = function(gpkg,
     mutate(comid = floor(as.numeric(.data$comid)),
            member_COMID = NULL) %>%
     left_join(order, by = "comid") %>%
-    right_join(df2, by = "comid")
+    left_join(df2,   by = "comid")
 
   flowpaths2 = flowpaths %>%
     group_by(.data$lake_id) %>%

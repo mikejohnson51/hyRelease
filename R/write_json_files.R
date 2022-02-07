@@ -12,15 +12,11 @@ write_lakes_json = function(df, outfile){
     left_join(select(df, lake_id, outletId)) %>%
     dplyr::distinct()
 
-
-  filter(df, outletId == 'wb-16278.1')
-
   lake_crosswalk_list <- lapply(unique(df$lake_id),
                                 function(x, df) {
                                   df_sub <- df[df$lake_id == x,]
-                                  out <-
-                                    list(member_wbs = df_sub$ID)
-                                  out$partial_length_percent <-df_sub$partial_length_percent
+                                  out <- list(member_wbs = df_sub$ID)
+                                  out$partial_length_percent <- df_sub$partial_length_percent
 
                                   out$lake_id    <- unique(df_sub$lake_id)
                                   out$Dam_Length <- as.numeric(unique(df_sub$Dam_Length))
@@ -41,14 +37,10 @@ write_lakes_json = function(df, outfile){
 
                                   out
 
-                                }, df = df)
+  }, df = df)
 
 
   names(lake_crosswalk_list) <- ind$outletId
-
-
-  grep('wb-16278.1', names(lake_crosswalk_list), value = TRUE)
-
 
   jsonlite::write_json(
     lake_crosswalk_list,
@@ -71,29 +63,21 @@ write_lakes_json = function(df, outfile){
 #' @importFrom sf read_sf st_drop_geometry
 #' @importFrom jsonlite write_json
 
-write_waterbody_json = function(gpkg,
-                                flowline_name,
-                                flowpaths = NULL,
-                                fl_name = "flowpaths",
-                                nwm_dir = "/Users/mjohnson/Downloads/",
-                                outfile){
+write_waterbody_json = function(fps, outfile){
 
-  if(!is.null(flowpaths)){
-    fl = flowpaths
+  req.names = c("ID", "member_COMID", "gages", "NHDWaterbodyComID",
+                "toID", "main_id", "realized_catchment", "lengthkm",
+                "slope_percent", "Qi", "MusK", "MusX", "n",
+                "ChSlp", "BtmWdth", "time", "Kchan", "nCC", "TopWdthCC", "TopWdth", "Length_m")
+
+
+  if(all(req.names %in% names(fps))){
+    missing.names = req.names[!req.names %in% names(fps)]
   } else {
-    fl = read_sf(gpkg, 'flowpaths')
+    stop("Need: ", paste(missing.names, collapse  = ", "))
   }
 
-
-  fl = fl %>%
-    length_average_routlink(
-      rl_vars = c(
-        "link", "Qi", "MusK", "MusX", "n", "So",  "ChSlp",
-        "BtmWdth", "time", "Kchan", "nCC", "TopWdthCC", "TopWdth"),
-      rl_path  = file.path(nwm_dir, "RouteLink_CONUS.nc"))  %>%
-     st_drop_geometry()
-
- wb_feilds <- lapply(unique(fl$ID),
+   wb_feilds <- lapply(unique(fps$ID),
                                 function(x, df) {
                                   df_sub <- df[df$ID == x,]
                                   out = list()
@@ -105,17 +89,17 @@ write_waterbody_json = function(gpkg,
                                   out$main_id    <- unique(df_sub$main_id)
                                   out$realized_catchment <- unique(df_sub$realized_catchment)
 
-                                  out$length_km  <- as.numeric(df_sub$length_km)
+                                  out$length_km  <- as.numeric(df_sub$lengthkm)
                                   out$slope_percentage   <- as.numeric(unique(df_sub$slope_percent))
-                                  out$Qi      <- as.numeric(unique(df_sub$Qi))
-                                  out$MusK    <- as.numeric(unique(df_sub$MusK))
-                                  out$MusX    <- as.numeric(unique(df_sub$MusX))
-                                  out$n       <- as.numeric(unique(df_sub$n))
-                                  out$ChSlp   <- as.numeric(unique(df_sub$ChSlp))
-                                  out$BtmWdth <- as.numeric(unique(df_sub$BtmWdth))
-                                  out$time    <- as.numeric(unique(df_sub$time))
-                                  out$Kchan   <- as.numeric(unique(df_sub$Kchan))
-                                  out$nCC     <- as.numeric(unique(df_sub$nCC))
+                                  out$Qi         <- as.numeric(unique(df_sub$Qi))
+                                  out$MusK       <- as.numeric(unique(df_sub$MusK))
+                                  out$MusX       <- as.numeric(unique(df_sub$MusX))
+                                  out$n          <- as.numeric(unique(df_sub$n))
+                                  out$ChSlp      <- as.numeric(unique(df_sub$ChSlp))
+                                  out$BtmWdth    <- as.numeric(unique(df_sub$BtmWdth))
+                                  out$time       <- as.numeric(unique(df_sub$time))
+                                  out$Kchan      <- as.numeric(unique(df_sub$Kchan))
+                                  out$nCC        <- as.numeric(unique(df_sub$nCC))
                                   out$TopWdthCC  <- as.numeric(unique(df_sub$TopWdthCC))
                                   out$TopWdth    <- as.numeric(unique(df_sub$TopWdth))
                                   out$Length_m   <- as.numeric(unique(df_sub$Length_m))
@@ -123,16 +107,15 @@ write_waterbody_json = function(gpkg,
                                   ind = unlist(lapply(1:length(out), function(i) !is.na(out[[i]])))
                                   out[ind]
 
-                                }, df = fl)
+                                }, df = fps)
 
 
-  names(wb_feilds) = fl$ID
+  names(wb_feilds) = fps$ID
 
   jsonlite::write_json(
     wb_feilds,
     outfile,
-    pretty = TRUE,
-    auto_unbox = TRUE
+    pretty = TRUE
   )
 }
 
@@ -154,10 +137,9 @@ write_waterbody_json = function(gpkg,
 #' @importFrom jsonlite write_json
 
 write_nwis_crosswalk = function(gpkg,
-                                flowline_name,
-                                flowpaths = NULL,
                                 fl_name = "flowpaths",
-                                nwm_dir = "/Users/mjohnson/Downloads/",
+                                flowpaths = NULL,
+                                nwm_dir = "./",
                                 outfile){
 
   if(!is.null(flowpaths)){

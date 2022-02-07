@@ -7,23 +7,16 @@ Takes a geopackage, extracts the flowpath features, and builds a lengthweighted 
 all RouteLink variables using \code{length_average_routlink}. The output data as written as JSON
 to the supplied outfile path.}
 \usage{
-write_waterbody_json(
-  gpkg,
-  flowline_name,
-  flowpaths = NULL,
-  fl_name = "flowpaths",
-  nwm_dir = "/Users/mjohnson/Downloads/",
-  outfile
-)
+write_waterbody_json(fps, outfile)
 }
 \arguments{
+\item{outfile}{file path to write to}
+
 \item{gpkg}{geopackage with flowline features}
 
 \item{fl_name}{name of flowline feature layer}
 
 \item{nwm_dir}{directory to NWM base files. Searched for a file called \code{Routelink_CONUS.nc}}
-
-\item{outfile}{file path to write to}
 }
 \value{
 file path
