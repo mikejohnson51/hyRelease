@@ -1,5 +1,5 @@
 Package: hyRelease
-Title: Build NGen Hydrofabric Releases
+Title: Build NGEN data fabrics
 Version: 0.0.0.9000
 Authors@R: 
     person("Mike", "Johnson", , "mikecp11@gmail.com", role = c("aut", "cre"),

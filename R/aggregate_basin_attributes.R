@@ -55,48 +55,34 @@ aggregate_basin_attributes = function(gpkg,
 
     doMC::registerDoMC()
 
-    pr_list = foreach::foreach(i = 1:nrow(pr), .combine = cbind) %dopar% {
-      zonal::execute_zonal(file = pr$fullname[i], w = gridmet_w)[,-c("ID")]
+    pr_list = foreach::foreach(i = 1:nrow(pr)) %dopar% {
+      zonal::execute_zonal(file = pr$fullname[i], w = gridmet_w)
     }
 
-    tm_list = foreach::foreach(i = 1:nrow(tm), .combine = cbind) %dopar% {
-      zonal::execute_zonal(file = tm$fullname[i], w = gridmet_w)[,-c("ID")]
+    tm_list = foreach::foreach(i = 1:nrow(tm)) %dopar% {
+      zonal::execute_zonal(file = tm$fullname[i], w = gridmet_w)
     }
   })
 
-  ppt  = setnames(pr_list, paste0('day', 1:ncol(pr_list)))
-  tavg = setnames(tm_list, paste0('day', 1:ncol(tm_list)))
+  ppt  = Reduce(function(dtf1, dtf2) merge(dtf1, dtf2, by = "ID", all.x = TRUE), pr_list)
+  tavg = Reduce(function(dtf1, dtf2) merge(dtf1, dtf2, by = "ID", all.x = TRUE), tm_list)
 
-  traits = data.frame(ID = sort(cats$ID))
+  ppt  = setnames(ppt, c("ID", paste0('day', 1:(ncol(ppt)-1))))
+  tavg = setnames(tavg, c("ID", paste0('day', 1:(ncol(tavg)-1))))
 
-  ## Mean PPT
-  traits$meanPPT = rowMeans(ppt)
+  stopifnot(identical(ppt$ID, tavg$ID))
+
+  gridmet_out_id = ppt$ID
+  ppt  = ppt[,-"ID"]
+  tavg = tavg[,-"ID"]
 
   # Snow Fractions
   jennings = filter(files, grepl("jennings", fullname))
-
   snow_tif = geogrid_warp(file = jennings$fullname, grid = make_grid(tm$fullname[1]), r = "bilinear")
 
-  jen = zonal::execute_zonal(file = snow_tif, w = gridmet_w, join = FALSE)
-  jen$kelvins = jen$V1 + 273.15
-
-  snow_day = tavg[, .SD  < jen$kelvins]
+  jen = zonal::execute_zonal(file = snow_tif + 273.15, w = gridmet_w, join = FALSE)
+  snow_day = tavg[, .SD  < jen$V1]
   snow = ppt * snow_day
-
-  traits$snowFrac  = rowSums(snow) / rowSums(ppt)
-
-  ## High PPT Freq
-  message("Computing High PPT freq ...")
-  ppt5x   = 5 * traits$meanPPT
-  highPPT = ppt[, .SD > ppt5x]
-  traits$high_ppt_freq = rowSums(highPPT) / years
-
-  message("Computing Low PPT freq ...")
-  lowPPT = ppt[, .SD < 1]
-  traits$low_ppt_freq = rowSums(lowPPT) / years
-
-  high     <- data.table(t(highPPT))
-  mod_cols <- names(high)
 
   ff = function(x){
     cs = cumsum(x)
@@ -104,28 +90,35 @@ aggregate_basin_attributes = function(gpkg,
     c(ifelse(diff(cs) < 0, cs, NA), cs[length(cs)])
   }
 
-  high[ , (mod_cols) := lapply(.SD, ff), .SDcols = mod_cols]
+  highPPT = ppt[, .SD > (5*rowMeans(ppt))]
+  lowPPT = ppt[, .SD < 1]
 
-  low <- data.table(t(lowPPT))
+  high     <- data.table(t(highPPT))
+  low      <- data.table(t(lowPPT))
+  mod_cols <- names(high)
+
+  high[ , (mod_cols) := lapply(.SD, ff), .SDcols = mod_cols]
   low[ , (mod_cols) := lapply(.SD, ff), .SDcols = mod_cols]
 
-  traits$high_ppt_dur = colMeans(high, na.rm = TRUE)
-  traits$low_ppt_dur  = colMeans(low,  na.rm = TRUE)
+  traits = data.frame(ID = gridmet_out_id,
+                       meanPPT = rowMeans(ppt),
+                       snowFrac = rowSums(snow) / rowSums(ppt),
+                       high_ppt_freq = rowSums(highPPT) / years,
+                       low_ppt_freq =  rowSums(lowPPT) / years,
+                       high_ppt_dur = colMeans(high, na.rm = TRUE),
+                       low_ppt_dur  = colMeans(low,  na.rm = TRUE))
+
 
   message("Processing Terrain (slope, mean elevation) ...")
 
-  DEM = filter(files, grepl("elevation", fullname))$fullname
-  DEM = terra::rast(DEM)
-
-  # t   = c(terra::terrain(DEM), DEM)
-  # terrain = zonal::execute_zonal(t, cats, 'ID') %>%
-  #   setnames(c("ID", "elevation", "slope"))
+  DEM = terra::rast(filter(files, grepl("elevation", fullname))$fullname)
 
   t = c(DEM, 1000*tan(terrain(DEM, v = "slope", unit = "radians")))
+
   terrain = zonal::execute_zonal(t, cats, 'ID', join = FALSE) %>%
     setnames(c("ID", "elevation", "slope"))
 
-  terrain$areasqkm = as.numeric(st_area(cats)/1e6)
+  terrain = left_join(terrain, select(st_drop_geometry(cats), ID, areasqkm = area_sqkm))
 
   traits = left_join(traits, terrain, by = "ID")
 

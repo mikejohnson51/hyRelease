@@ -1,5 +1,13 @@
 omit.na = function(x){ x[!is.na(x)] }
 
+#' @title Write NGEN spatial products
+#' @param flowpaths sf object
+#' @param catchments sf object
+#' @param nexus sf object
+#' @param spatial_path where to right the spatial path
+#' @return
+#' @export
+
 write_nextgen_spatial = function(flowpaths, catchments, nexus, spatial_path){
   hyfab = file.path(spatial_path, "hydrofabric.gpkg")
   sf::write_sf(catchments, hyfab, 'catchments', overwrite = TRUE)
@@ -11,6 +19,14 @@ write_nextgen_spatial = function(flowpaths, catchments, nexus, spatial_path){
 
   return(hyfab)
 }
+
+#' @title Write NGEN spatial products
+#' @param flowpaths sf object
+#' @param catchments sf object
+#' @param nexus sf object
+#' @param spatial_path where to right the spatial path
+#' @return
+#' @export
 
 gpkg_layers = function(path, goal, pattern = NULL){
 
@@ -30,16 +46,33 @@ gpkg_layers = function(path, goal, pattern = NULL){
   }
 }
 
+#' @title Build a file.path explicitly
+#' @param flowpaths sf object (LINESTRING)
+#' @param catchments sf object (POLYGON)
+#' @param nexus sf object (POINT)
+#' @param spatial_path where to right the spatial path
+#' @return
+#' @export
+
 file.path.build = function(..., fsep = .Platform$file.sep){
   tmp.dir = .Internal(file.path(list(...), fsep))
   dir.create(tmp.dir, recursive = TRUE, showWarnings = FALSE)
   tmp.dir
 }
 
-get_UT_reference = function (network,
-                             reference_fabric_dir,
-                             comid,
-                             outfile  = NULL) {
+#' @title Extract upstream network from reference fabric
+#' @param network enhd_nhdplusatts data.frame
+#' @param reference_fabric_dir path to refernece network directory
+#' @param comid Origin of network trace (COMID)
+#' @return list containing catchment and flowpath networks
+#' @export
+#' @importFrom dplyr filter tbl collect bind_rows
+#' @importFrom nhdplusTools get_UT get_vaa
+#' @importFrom DBI dbConnect dbDisconnect
+#' @importFrom RSQLite SQLite
+#' @importFrom sf st_as_sf write_sf
+
+get_UT_reference = function(network, reference_fabric_dir, comid, outfile  = NULL) {
 
   reference_fabric = list.files(reference_fabric_dir, full.names = TRUE, pattern = "gpkg$")
 
@@ -82,6 +115,31 @@ get_UT_reference = function (network,
     return(list(fps = dplyr::bind_rows(fps), cats = dplyr::bind_rows(cats)))
   }
 }
+
+#' Refactoring Wrapper
+#' @description A wrapper around hyRefactor refactor_nhdplus and
+#' reconcile_catchment_divides that optionally adds routing parameters to the
+#' flowpath objects.
+#' @param flowpaths Reference flowline features
+#' @param catchments Reference catchment features
+#' @param events 	data.frame containing events
+#' @param avoid integer vector of COMIDs to be excluded from collapse modifications.
+#' @param split_flines_meters numeric the maximum length flowpath desired in the output.
+#' @param collapse_flines_meters      numeric the minimum length of inter-confluence flowpath desired in the output.
+#' @param collapse_flines_main_meters numeric the minimum length of between-confluence flowpaths.
+#' @param cores   integer number of cores to use for parallel execution
+#' @param keep    Defines the proportion of points to retain in geometry simplification (0-1; default .9). See ms_simplify.
+#' @param facfdr  path to directory with flow direction and flow accumulation `SpatRast`. If NULL (default) then catchments are NOT reconciled.
+#' @param routing path to National Water Model RouteLink file. If NULL (default) then routing parameters are NOT added to the refactroed flowlines.
+#' @param keep
+#' @param outfile path to geopackage to write refactored_flowlines, and if facfdr != NULL, refactored catchments.
+#' @return data to the specified gpkg
+#' @export
+#' @importFrom dplyr filter select rename
+#' @importFrom hyRefactor refactor_nhdplus add_lengthmap reconcile_catchment_divides
+#' @importFrom sf read_sf st_transform st_drop_geometry write_sf st_crs st_precision
+#' @importFrom raster raster res
+#' @importFrom nhdplusTools get_streamorder get_vaa
 
 refactor_wrapper = function (flowpaths, catchments,
                              events = NULL, avoid = NULL,
@@ -138,6 +196,7 @@ refactor_wrapper = function (flowpaths, catchments,
                                                        fac = terra::rast(grep("_fac.tif$", fdrfac_files, value = TRUE)),
                                                        para = cores,
                                                        cache = NULL,
+                                                       keep = keep,
                                                        fix_catchments = TRUE)
   }
 
@@ -151,6 +210,15 @@ refactor_wrapper = function (flowpaths, catchments,
   }
 
 }
+
+#' Length Average Routelink Variable
+#' @param flowpaths sf LINESTRING
+#' @param rl_vars routelink variables
+#' @param rl_path routelink path
+#' @return sf LINESTRING object
+#' @export
+#' @importFrom hyRefactor add_lengthmap get_vaa
+#' @importFrom  dplyr select mutate rename right_join
 
 length_average_routlink = function (flowpaths,
                                     rl_vars = c("link", "Qi", "MusK", "MusX", "n", "So", "ChSlp", "BtmWdth",
@@ -217,6 +285,7 @@ length_average_routlink = function (flowpaths,
 }
 
 
+
 write_nwis_crosswalk2 = function(flowpaths, catchments, gages_iii, outfile){
 
   nwis_sites = read_sf(gages_iii) |>
@@ -228,7 +297,6 @@ write_nwis_crosswalk2 = function(flowpaths, catchments, gages_iii, outfile){
     st_drop_geometry() |>
     filter(!is.na(Gage_no)) |>
     mutate(ID = as.numeric(gsub(".*-","", ID)))
-
 
   nhd_crosswalk <- st_drop_geometry(flowpaths) %>%
     select(ID, member_COMID, main_id) %>%
