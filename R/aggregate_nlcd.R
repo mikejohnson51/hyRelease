@@ -1,4 +1,4 @@
-#' Aggregated NLCD variables
+#' @title Aggregated NLCD variables
 #' @param gpkg a geopackage with aggregation units
 #' @param catchment_name the layer name of the aggregation units
 #' @param imperv_path path to NLCD impervious IMG file
@@ -31,6 +31,8 @@ aggregate_nlcd = function(gpkg,
                          precision = 9,
                          out_file = NULL){
 
+  .SD <- .data <- NULL
+
   cats = sf::read_sf(gpkg, catchment_name)
   lc_w = zonal::weighting_grid(imperv_path, cats, "ID" )
 
@@ -38,9 +40,11 @@ aggregate_nlcd = function(gpkg,
     setnames(c("ID", "impervious_percentage"))
 
   zz =  zonal::execute_zonal(file = lc_path, w = lc_w, FUN = "freq", join = FALSE) %>%
-    mutate(value = paste0("percent_nlcd_lc_", value),
-            percentage = 100 * percentage) %>%
-    tidyr::pivot_wider(id_cols = "ID", names_from = "value", values_from = "percentage")
+    mutate(value = paste0("percent_nlcd_lc_", .data$value),
+            percentage = 100 * .data$percentage) %>%
+    tidyr::pivot_wider(id_cols = "ID",
+                       names_from = "value",
+                       values_from = "percentage")
 
   dt = dplyr::full_join(xx, zz, by = "ID")
 

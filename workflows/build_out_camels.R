@@ -49,6 +49,7 @@ reference_fabric_dir = '/Volumes/Transcend/ngen/CONUS-hydrofabric/ngen-reference
 facfdr               = '/Volumes/Transcend/ngen/fdrfac_cog'
 nwm_dir              = '/Volumes/Transcend/nwmCONUS-v216'
 gages_iii            = '/Volumes/Transcend/ngen/gages_iii.gpkg'
+wb_gpkg              = '/Users/mjohnson/Downloads/nhdplus_waterbodies.gpkg'
 
 nexus_prefix          = "nex-"
 catchment_prefix      = "cat-"
@@ -68,7 +69,7 @@ network   = read_parquet(network_parquet, col_select = c('comid',
 }
 i
 
-#163
+#163 is a disconnected network problem!!
 
 for(i in 164:nrow(camels)){
 
@@ -142,13 +143,20 @@ for(i in 164:nrow(camels)){
      write_nwis_crosswalk2(flowpath_data, gages_iii = gages_iii, outfile = file.path(parameter_path, "cross-walk.json"))
   }
 
+  build_lake_params = function(gpkg = hyfab,
+                               catchment_name = "catchments",
+                               flowline_name  = 'flowpaths',
+                               waterbody_gpkg = wb_gpkg,
+                               nwm_dir = nwm_dir,
+                               out_file = NULL)
+
   ### PARAMTERS
    cfe    = file.path(parameter_path, 'cfe.csv')
    b_atts = file.path(parameter_path, 'basin_attributes.csv')
    noaowp = file.path(parameter_path, 'noahowp.csv')
    atts   = file.path(parameter_path, 'attributes.parquet')
 
-   unlink(file.path(parameter_path, 'attributes.csv'))
+   unlink(atts)
 
    if(!file.exists(cfe)){
       aggregate_cfe(
@@ -190,3 +198,6 @@ for(i in 164:nrow(camels)){
 
   cat(crayon::blue("\nFinished:", i))
 }
+
+
+

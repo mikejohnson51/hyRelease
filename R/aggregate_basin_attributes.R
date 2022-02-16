@@ -1,5 +1,57 @@
+#' Map Variables
+#' @description  Wrapper to extract, rename and return or write a csv of zonal variables
+#' @param r a file path, terra SpatRaster or raster raster object
+#' @param w a weighting file computed with zonal::weighting_grid
+#' @param file a CSV path to write data to, if NULL data.table object is returned
+#' @param precision computational precision of the zonal calculations
+#' @param FUN a summary function (see zonal::execute_zonal)
+#' @param verbose should messages be emitted?
+#' @return file path or data.table
+#' @export
+#' @importFrom zonal execute_zonal
+#' @importFrom terra window
+#' @importFrom data.table fwrite
 
-#' Aggregated LSTM variables
+map_vars = function(r, w, file = NULL, precision = 9,
+                    FUN = "mean", single_layer = FALSE,
+                    verbose = TRUE, prefix = NULL){
+
+
+  cols = names(r)
+
+  if(single_layer){
+    cols1 = grep('stag=1', cols, value = TRUE)
+    cols2 = cols[!grepl('stag=', cols)]
+    cols = c(cols1, cols2)
+    r = r[[cols]]
+  }
+
+  cols = gsub("_Time=1", "", names(r))
+
+  out = execute_zonal(r, w = w, FUN = FUN, join = FALSE)
+
+  if(is.null(prefix)){
+    names(out) = c("ID",  cols)
+  } else {
+    cols = paste0(prefix, cols)
+    names(out) = c("ID",  cols)
+  }
+
+  out[,(cols) := round(.SD, precision), .SDcols = cols]
+  terra::window(r) = NULL
+
+  if(is.null(file)){
+    return(out)
+  } else {
+    data.table::fwrite(out, file, row.names = FALSE)
+    message(file)
+    return(file)
+  }
+}
+
+
+#' Aggregated Basin Attributes
+#' @description Compute CAMELs-esqe basin attributes for hydrofabric catchments
 #' @param gpkg a geopackage with aggregation units
 #' @param catchment_name the layer name of the aggregation units
 #' @param geo_dir the geogroids geo directory
@@ -18,13 +70,13 @@
 #' @importFrom terra rast terrain classify window ext
 
 aggregate_basin_attributes = function(gpkg,
-                                 catchment_name,
-                                 geo_dir,
-                                 years = 3,
-                                 precision = 9,
-                                 out_file = NULL){
+                                      catchment_name,
+                                      geo_dir,
+                                      years = 3,
+                                      precision = 9,
+                                      out_file = NULL){
 
-  .SD <- NULL
+  .SD <-i <- .data <- NULL
 
   files = geo_cache_list(geo_dir)
 
@@ -37,17 +89,17 @@ aggregate_basin_attributes = function(gpkg,
   message("Loading PPT, AVG, and SNOW Thresholds ...")
   message("Using ", years, " years of Gridmet Data")
 
-  pr = filter(files, grepl('pr', fullname)) %>%
-    filter(grepl(".nc", fullname)) %>%
-    arrange(desc(fullname)) %>%
+  pr = filter(files, grepl('pr', .data$fullname)) %>%
+    filter(grepl(".nc", .data$fullname)) %>%
+    arrange(desc(.data$fullname)) %>%
     slice(1:years) %>%
-    arrange(fullname)
+    arrange(.data$fullname)
 
-  tm = filter(files, grepl('tavg', fullname))  %>%
-    filter(grepl(".nc", fullname)) %>%
-    arrange(desc(fullname)) %>%
+  tm = filter(files, grepl('tavg', .data$fullname))  %>%
+    filter(grepl(".nc", .data$fullname)) %>%
+    arrange(desc(.data$fullname)) %>%
     slice(1:years) %>%
-    arrange(fullname)
+    arrange(.data$fullname)
 
   gridmet_w = zonal::weighting_grid(pr$fullname[1], cats, "ID")
 
@@ -77,7 +129,7 @@ aggregate_basin_attributes = function(gpkg,
   tavg = tavg[,-"ID"]
 
   # Snow Fractions
-  jennings = filter(files, grepl("jennings", fullname))
+  jennings = filter(files, grepl("jennings", .data$fullname))
   snow_tif = geogrid_warp(file = jennings$fullname, grid = make_grid(tm$fullname[1]), r = "bilinear")
 
   jen = zonal::execute_zonal(file = snow_tif + 273.15, w = gridmet_w, join = FALSE)
@@ -111,22 +163,22 @@ aggregate_basin_attributes = function(gpkg,
 
   message("Processing Terrain (slope, mean elevation) ...")
 
-  DEM = terra::rast(filter(files, grepl("elevation", fullname))$fullname)
+  DEM = terra::rast(filter(files, grepl("elevation", .data$fullname))$fullname)
 
   t = c(DEM, 1000*tan(terrain(DEM, v = "slope", unit = "radians")))
 
   terrain = zonal::execute_zonal(t, cats, 'ID', join = FALSE) %>%
     setnames(c("ID", "elevation", "slope"))
 
-  terrain = left_join(terrain, select(st_drop_geometry(cats), ID, areasqkm = area_sqkm))
+  terrain = left_join(terrain, select(st_drop_geometry(cats), .data$ID, areasqkm = .data$area_sqkm))
 
   traits = left_join(traits, terrain, by = "ID")
 
   message("Processing soil information (sand, silt, clay, depth, permiability) ...")
 
-  s = filter(files, grepl("sand-1m|silt-1m|clay-1m|rockdepm|GLIM_xx|permeability_permafrost", fullname)) %>%
-    filter(grepl(".tif", fullname)) %>%
-    dplyr::pull(fullname) %>%
+  s = filter(files, grepl("sand-1m|silt-1m|clay-1m|rockdepm|GLIM_xx|permeability_permafrost", .data$fullname)) %>%
+    filter(grepl(".tif", .data$fullname)) %>%
+    dplyr::pull(.data$fullname) %>%
     terra::rast()
 
   soils_w = zonal::weighting_grid(s, cats, "ID")
@@ -136,7 +188,7 @@ aggregate_basin_attributes = function(gpkg,
     mutate(`clay-1m-percent` = .data$`clay-1m-percent` * 100,
            `sand-1m-percent` = .data$`sand-1m-percent` * 100,
            `silt-1m-percent` = .data$`silt-1m-percent` * 100,
-            rockdepm = rockdepm / 100,
+            rockdepm = .data$rockdepm / 100,
            carbonate_rocks_frac = .data$GLIM_xx/ 100,
            GLIM_xx = NULL,
            soil_conductivity = -0.60 +  (0.0126*.data$`sand-1m-percent`) - (0.0064*.data$`clay-1m-percent`),
@@ -181,28 +233,28 @@ aggregate_basin_attributes = function(gpkg,
     setnames(c("ID", "dom_lc"))
 
   forest = lu %>%
-    filter(value %in% c(1:5)) %>%
-    group_by(ID) %>%
-    summarise(forest = sum(percentage, na.rm = TRUE)) %>%
+    filter(.data$value %in% c(1:5)) %>%
+    group_by(.data$ID) %>%
+    summarise(forest = sum(.data$percentage, na.rm = TRUE)) %>%
     ungroup()
 
   traits = left_join(left_join(traits, forest, by = "ID"), lu_dom, by = "ID") %>%
-    mutate(forest = ifelse(is.na(forest), 0, forest))
+    mutate(forest = ifelse(is.na(.data$forest), 0, .data$forest))
 
   ## GVF & LAI
 
   message("Generating and processing LAI and GVF data ...")
 
-  lai = filter(files, grepl("LAI/summary/cogs/", fullname)) %>%
-    filter(grepl("tif$", fullname)) %>%
-    filter(grepl("diff|max", fullname))
+  lai = filter(files, grepl("LAI/summary/cogs/", .data$fullname)) %>%
+    filter(grepl("tif$", .data$fullname)) %>%
+    filter(grepl("diff|max", .data$fullname))
 
   lai = zonal::execute_zonal(rast(lai$fullname), w = mod_500, FUN = "mean", join = FALSE) %>%
     setnames(c("ID", "lai_diff", "lai_max"))
 
-  gvf = filter(files, grepl("GVF/summary/cogs/", fullname)) %>%
-    filter(grepl("tif$", fullname)) %>%
-    filter(grepl("diff|max", fullname))
+  gvf = filter(files, grepl("GVF/summary/cogs/", .data$fullname)) %>%
+    filter(grepl("tif$", .data$fullname)) %>%
+    filter(grepl("diff|max", .data$fullname))
 
   gvf = zonal::execute_zonal(rast(gvf$fullname), cats, "ID", FUN = "mean", join = FALSE) %>%
     setnames(c("ID", "gvf_diff", "gvf_max"))

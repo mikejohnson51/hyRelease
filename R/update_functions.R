@@ -54,8 +54,8 @@ gpkg_layers = function(path, goal, pattern = NULL){
 #' @return
 #' @export
 
-file.path.build = function(..., fsep = .Platform$file.sep){
-  tmp.dir = .Internal(file.path(list(...), fsep))
+file.path.build = function(...){
+  tmp.dir = paste(list(...), collapse = .Platform$file.sep)
   dir.create(tmp.dir, recursive = TRUE, showWarnings = FALSE)
   tmp.dir
 }
@@ -131,14 +131,13 @@ get_UT_reference = function(network, reference_fabric_dir, comid, outfile  = NUL
 #' @param keep    Defines the proportion of points to retain in geometry simplification (0-1; default .9). See ms_simplify.
 #' @param facfdr  path to directory with flow direction and flow accumulation `SpatRast`. If NULL (default) then catchments are NOT reconciled.
 #' @param routing path to National Water Model RouteLink file. If NULL (default) then routing parameters are NOT added to the refactroed flowlines.
-#' @param keep
+#' @param keep proportion of points to retain in geometry simplification (0-1; default 0.05). See ms_simplify. If NULL, then no simplification will be executed.
 #' @param outfile path to geopackage to write refactored_flowlines, and if facfdr != NULL, refactored catchments.
 #' @return data to the specified gpkg
 #' @export
 #' @importFrom dplyr filter select rename
 #' @importFrom hyRefactor refactor_nhdplus add_lengthmap reconcile_catchment_divides
 #' @importFrom sf read_sf st_transform st_drop_geometry write_sf st_crs st_precision
-#' @importFrom raster raster res
 #' @importFrom nhdplusTools get_streamorder get_vaa
 
 refactor_wrapper = function (flowpaths, catchments,
@@ -217,7 +216,8 @@ refactor_wrapper = function (flowpaths, catchments,
 #' @param rl_path routelink path
 #' @return sf LINESTRING object
 #' @export
-#' @importFrom hyRefactor add_lengthmap get_vaa
+#' @importFrom hyRefactor add_lengthmap
+#' @importFrom nhdplusTools get_vaa
 #' @importFrom  dplyr select mutate rename right_join
 
 length_average_routlink = function (flowpaths,
