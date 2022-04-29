@@ -72,47 +72,54 @@ file.path.build = function(...){
 #' @importFrom RSQLite SQLite
 #' @importFrom sf st_as_sf write_sf
 
-get_UT_reference = function(network, reference_fabric_dir, comid, outfile  = NULL) {
+get_UT_reference = function(network,
+                            reference_flowlines,
+                            reference_catchments = NULL,
+                            comid,
+                            outfile  = NULL) {
 
-  reference_fabric = list.files(reference_fabric_dir, full.names = TRUE, pattern = "gpkg$")
 
-  if(length(reference_fabric) == 0 ){
-    stop("Reference Fabric not found", call. = FALSE)
+  if(is.null(reference_flowlines) & is.null(reference_catchments)) {
+    stop("Need reference flowpaths or catchments")
   }
 
-  master = dplyr::filter(nhdplusTools::get_vaa("rpuid"),
-                         comid %in% nhdplusTools::get_UT(network, !!comid))
+  ut = nhdplusTools::get_UT(network, comid)
 
-  RPUS = omit.na(unique(master$rpuid))
+  if(!is.null(reference_flowlines)) {
+  db <- DBI::dbConnect(RSQLite::SQLite(), reference_flowlines)
 
-  cats <- fps <-  list()
-
-  for (i in 1:length(RPUS)) {
-    fin = grep(RPUS[i], reference_fabric, value = TRUE)
-
-
-    db <- DBI::dbConnect(RSQLite::SQLite(), fin)
-    mas = dplyr::filter(master, .data$rpuid == RPUS[i])$comid
-
-    fps[[i]] = tbl(db, "flowpaths") %>%
-      dplyr::filter(.data$COMID %in% mas) %>%
-      dplyr::collect() %>%
-      sf::st_as_sf(crs = 4326)
-
-    cats[[i]] = dplyr::tbl(db, "nhd_catchment") %>%
-      dplyr::filter(.data$featureid %in% mas) %>%
+    fps = tbl(db, "nhd_flowline") %>%
+      dplyr::filter(.data$COMID %in% ut) %>%
       dplyr::collect() %>%
       sf::st_as_sf(crs = 4326)
 
     DBI::dbDisconnect(db)
+
+  } else {
+    fps = NULL
   }
 
+  if(!is.null(reference_catchments)){
+    db <- DBI::dbConnect(RSQLite::SQLite(), reference_catchments)
+
+    cats = dplyr::tbl(db, "reference_catchments") %>%
+          dplyr::filter(.data$featureid %in% mas) %>%
+          dplyr::collect() %>%
+          sf::st_as_sf(crs = 5070) |>
+          sf::st_transform(4326)
+
+     DBI::dbDisconnect(db)
+  } else {
+    cats = NULL
+  }
+
+
   if(!is.null(outfile)){
-    write_sf(dplyr::bind_rows(fps),  outfile, "reference_flowpaths")
-    write_sf(dplyr::bind_rows(cats), outfile, "reference_catchments")
+    if(!is.null(fps)){sf::write_sf(fps,  outfile, "reference_flowpaths") }
+    if(!is.null(cats)){sf::write_sf(cats, outfile, "reference_catchments") }
     return(outfile)
   } else {
-    return(list(fps = dplyr::bind_rows(fps), cats = dplyr::bind_rows(cats)))
+    return(list(fps = fps, cats = cats))
   }
 }
 
@@ -147,7 +154,9 @@ refactor_wrapper = function (flowpaths, catchments,
                              collapse_flines_main_meters = 1000,
                              cores = 1,
                              facfdr = NULL,
-                             routing = NULL, keep = 0.9, outfile) {
+                             routing = NULL,
+                             network = NULL,
+                             keep = 0.9, outfile) {
 
   tf <- tempfile(pattern = "refactored", fileext = ".gpkg")
   tr <- tempfile(pattern = "reconciled", fileext = ".gpkg")
@@ -160,14 +169,26 @@ refactor_wrapper = function (flowpaths, catchments,
     avoid = avoid[avoid %in% flowpaths$COMID]
   }
 
-  hyRefactor::refactor_nhdplus(nhdplus_flines = flowpaths, split_flines_meters = split_flines_meters,
-                   split_flines_cores = 1, collapse_flines_meters = collapse_flines_meters,
-                   collapse_flines_main_meters = collapse_flines_main_meters,
-                   out_refactored = tf, out_reconciled = tr, three_pass = TRUE,
-                   purge_non_dendritic = FALSE, events = events, exclude_cats = avoid,
-                   warn = FALSE)
+  hyRefactor::refactor_nhdplus(nhdplus_flines = flowpaths,
+                               split_flines_meters = split_flines_meters,
+                               split_flines_cores = 1,
+                               collapse_flines_meters = collapse_flines_meters,
+                               collapse_flines_main_meters = collapse_flines_main_meters,
+                               out_refactored = tf,
+                               out_reconciled = tr,
+                               three_pass = TRUE,
+                               purge_non_dendritic = FALSE,
+                               events = events,
+                               exclude_cats = avoid,
+                               warn = FALSE)
 
-  rec = st_transform(read_sf(tr), 5070)
+
+  rec = st_transform(read_sf(tr), 5070) %>%
+    rename_geometry("geometry")
+
+  if("ID.1" %in% names(rec)) {
+    rec = select(rec, -"ID.1")
+  }
 
   if (!is.null(routing)) {
     rec$order = nhdplusTools::get_streamorder(st_drop_geometry(select(rec, .data$ID, .data$toID)), status = FALSE)
@@ -179,7 +200,7 @@ refactor_wrapper = function (flowpaths, catchments,
                               rl_path = routing)
   }
 
-  if (!is.null(facfdr)) {
+  if (!is.null(facfdr) & !is.null(catchments)) {
 
     rpus         = omit.na(unique(flowpaths$RPUID))
     fdrfac_files = list.files(facfdr, pattern = rpus, full.names = TRUE)
@@ -196,21 +217,32 @@ refactor_wrapper = function (flowpaths, catchments,
                                                        para = cores,
                                                        cache = NULL,
                                                        keep = keep,
-                                                       fix_catchments = TRUE)
+                                                       fix_catchments = TRUE) %>%
+      rename_geometry("geometry")
+  } else {
+
+    divides = NULL
   }
 
   unlink(list(tr, tf))
 
   if(!is.null(outfile)){
-    write_sf(st_transform(rec, 5070),     outfile, "refactored_flowpaths",  overwrite = TRUE)
-    write_sf(st_transform(divides, 5070), outfile, "refactored_catchments", overwrite = TRUE)
+
+    if(!is.null(rec)){
+      write_sf(st_transform(rec, 5070),     outfile, "refactored_flowpaths",  overwrite = TRUE)
+    }
+
+    if(!is.null(divides)){
+      write_sf(st_transform(divides, 5070), outfile, "refactored_catchments", overwrite = TRUE)
+    }
+
   } else {
     list(fps  = st_transform(rec, 5070), cats = st_transform(divides, 5070))
   }
 
 }
 
-#' Length Average Routelink Variable
+#' Length Average Routelink Variables
 #' @param flowpaths sf LINESTRING
 #' @param rl_vars routelink variables
 #' @param rl_path routelink path
@@ -218,9 +250,9 @@ refactor_wrapper = function (flowpaths, catchments,
 #' @export
 #' @importFrom hyRefactor add_lengthmap
 #' @importFrom nhdplusTools get_vaa
-#' @importFrom  dplyr select mutate rename right_join
+#' @importFrom dplyr select mutate rename right_join
 
-length_average_routlink = function (flowpaths,
+length_average_routelink = function (flowpaths,
                                     rl_vars = c("link", "Qi", "MusK", "MusX", "n", "So", "ChSlp", "BtmWdth",
                                                 "time", "Kchan", "nCC", "TopWdthCC", "TopWdth"),
                                     rl_path) {

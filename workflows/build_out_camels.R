@@ -60,14 +60,12 @@ ternimal_wb_prefix    = "twb-"
 
 camels    = mutate(fread("camels.csv"), gageID = sprintf("%08d", gageID))
 
-network   = read_parquet(network_parquet, col_select = c('comid',
-                                                         'pathlength',
-                                                         'lengthkm',
-                                                         'hydroseq',
-                                                          'levelpathi',
-                                                          'dnhydroseq'))
+network   = read_parquet(network_parquet,
+                         col_select = c('comid', 'pathlength',
+                                        'lengthkm', 'hydroseq',
+                                         'levelpathi','dnhydroseq'))
 }
-i
+
 
 #163 is a disconnected network problem!!
 
@@ -83,9 +81,9 @@ for(i in 164:nrow(camels)){
 
   if(!gpkg_layers(path = ref, 2, "reference")){
     get_UT_reference(network,
-                 reference_fabric_dir = reference_fabric_dir,
-                 comid = COMID,
-                 outfile = ref)
+                     reference_fabric_dir = reference_fabric_dir,
+                     comid = COMID,
+                     outfile = ref)
   }
 
   if(!gpkg_layers(path = ref, 2, "refactored")){
@@ -110,53 +108,77 @@ for(i in 164:nrow(camels)){
    rm(o)
   }
 
-  fps = sf::read_sf(ref, "aggregated_flowpaths")
+  write_hydrofabric = function(gpkg,
+                               catchment_name, flowpath_name,
+                               spatial_path, parameter_path,
+                               waterbody_prefix  = "wb-",
+                               catchment_prefix = "cat-",
+                               nexus_prefix = "nex-",
+                               terminal_nexus_prefix = "tnx-",
+                               overwrite = FALSE
+                               ){
 
-  ########## GRAPH DATA
-  catchment_edge_list <- get_catchment_edges_terms(fps)
-  fp_edge_list        <- get_catchment_edges_terms(fps, catchment_prefix = waterbody_prefix)
 
-  ########## SPATIAL DATA
+    hyfab = file.path(spatial_path, "hydrofabric.gpkg")
+    fp_el = file.path(parameter_path, "flowpath_edge_list.json")
 
-  hyfab = file.path(spatial_path, "hydrofabric.gpkg")
+    if(any(check_file(fp_el, overwrite), check_file(hyfab, overwrite))){
 
-  if(!file.exists(hyfab)){
-    nexus_data = hyAggregate::get_nexus_locations(fps) %>%
+      fps   = sf::read_sf(gpkg, flowpath_name)
+      ########## GRAPH DATA
+      catchment_edge_list <- get_catchment_edges_terms(fps) |>
+        mutate(ngen_pu = ngen_pu)
+      fp_edge_list        <- get_catchment_edges_terms(fps, catchment_prefix = waterbody_prefix) |>
+        mutate(ngen_pu = ngen_pu)
+      write_json(fp_edge_list, fp_el, pretty = TRUE)
+
+      ########## SPATIAL DATA
+
+      nexus_data = hyAggregate::get_nexus_locations(fps) %>%
         mutate(prefix = ifelse(ID > 100000000, terminal_nexus_prefix, nexus_prefix)) %>%
         mutate(ID = paste0(prefix, ID), prefix = NULL) %>%
         left_join(catchment_edge_list, by = c("ID")) %>%
         mutate(toID  = ifelse(toID == "cat-0", NA, toID))
 
-    catchment_data  = sf::read_sf(ref, "aggregated_catchments") %>%
+      catchment_data  = sf::read_sf(ref, catchment_name) %>%
         rename(area_sqkm = areasqkm) %>%
         get_catchment_data(catchment_edge_list, catchment_prefix = catchment_prefix)
 
-    flowpath_data =  fps %>%
-        add_slope() %>%
-        get_flowpath_data(catchment_edge_list) %>%
-        length_average_routlink(rl_path  = file.path(nwm_dir, "RouteLink_CONUS.nc"))
+      flowpath_data = get_flowpath_data(add_slope(fps), catchment_edge_list)
 
-     hyfab = write_nextgen_spatial(flowpath_data, catchment_data, nexus_data, spatial_path)
+      hyfab = write_nextgen_spatial(flowpath_data, catchment_data, nexus_data, spatial_path)
+    }
 
-     write_json(fp_edge_list, file.path(parameter_path, "flowpath_edge_list.json"), pretty = TRUE)
-     write_waterbody_json(flowpath_data, outfile = file.path(parameter_path, "flowpath_parameters.json"))
-     write_nwis_crosswalk2(flowpath_data, gages_iii = gages_iii, outfile = file.path(parameter_path, "cross-walk.json"))
+    return(hyfab)
   }
 
-  build_lake_params = function(gpkg = hyfab,
-                               catchment_name = "catchments",
-                               flowline_name  = 'flowpaths',
-                               waterbody_gpkg = wb_gpkg,
-                               nwm_dir = nwm_dir,
-                               out_file = NULL)
+
+  hyfab = write_hydrofabric(ref,
+                            catchment_name = "aggregated_catchments",
+                            flowpath_name = "aggregated_flowpaths",
+                            spatial_path, parameter_path )
+
+
+  write_waterbody_json(hyfab,
+                       flowpath_name = 'flowpaths',
+                       outfile = file.path(parameter_path, "flowpath_parameters.json"))
+
+  write_nwis_crosswalk2(flowpath_data,
+                        gages_iii = gages_iii,
+                        outfile = file.path(parameter_path, "cross-walk.json"))
+
+  build_lake_params(gpkg = hyfab,
+                    catchment_name = "catchments",
+                    flowline_name  = 'flowpaths',
+                    waterbody_gpkg = wb_gpkg,
+                    nwm_dir = nwm_dir,
+                    out_file = NULL)
 
   ### PARAMTERS
    cfe    = file.path(parameter_path, 'cfe.csv')
    b_atts = file.path(parameter_path, 'basin_attributes.csv')
    noaowp = file.path(parameter_path, 'noahowp.csv')
    atts   = file.path(parameter_path, 'attributes.parquet')
-
-   unlink(atts)
 
    if(!file.exists(cfe)){
       aggregate_cfe(

@@ -1,0 +1,131 @@
+---
+title: "NGEN Reference Fabric Creation"
+output: html_document
+editor_options:
+  chunk_output_type: console
+params:
+  RPU: 01a
+  min_da_km: 20
+  base_dir: "/Volumes/Transcend/ngen"
+  reference_fabric: "/Users/mjohnson/Downloads/"
+  output_dir: "/Volumes/Transcend/ngen/testing_conus_workflow"
+  AWS_bucket: "formulations-dev/hydrofabric/ngen-reference"
+  overwrite: FALSE
+---
+
+```{r setup_0, echo=FALSE, cache=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, warning = FALSE, message = FALSE)
+#/Users/mjohnson/Downloads/reference_01.gpkg
+library(sf)
+library(dplyr)
+library(nhdplusTools)
+
+select <- dplyr::select
+
+source("/Users/mjohnson/github/hydroresolve/R/utils.R")
+
+RPU = params$RPU
+VPU = substr(RPU, 1, 2)
+if(RPU == "03g"){ VPU = "08"}
+
+ref_gpkg = file.path(params$reference_fabric, paste0("reference_", VPU ,".gpkg"))
+out_gpkg = file.path(params$output_dir, paste0("ngen_reference_", VPU,".gpkg"))
+
+process = (!file.exists(out_gpkg) | params$overwrite)
+
+# Output Layers
+poi_layer <-  paste0("POIs_", VPU)
+```
+
+
+# Load NHD Flowline, Catchment and Outlet network. 
+
+```{r Generate}
+
+if(process){
+  
+  message('Running VPU-', VPU)
+  message('Reading from ', ref_gpkg)
+  message('Writing to ', out_gpkg)
+  
+  nhd <- read_sf(ref_gpkg, "nhd_flowline") %>%
+    subset_rpu(RPU, run_make_standalone = TRUE) %>%
+    st_sf()
+
+  nhd_outlets <- nhd %>% 
+      filter(VPUID %in% VPU) %>%
+      filter(Hydroseq == TerminalPa | (toCOMID == 0 | is.na(toCOMID))) %>%
+      st_sf()
+
+  flowln_df = arrow::open_dataset('/Users/mjohnson/Downloads/enhd_nhdplusatts.parquet') %>% 
+    dplyr::select(featureid = comid, fcode, terminalfl) %>%
+    dplyr::filter(featureid %in% nhd$COMID) %>%
+    collect()
+  
+  sinks_df = arrow::open_dataset('/Volumes/Transcend/ngen/testing_conus_workflow/sinks_atts.parquet') %>%
+    dplyr::select(featureid = sinkid, rpuid = inrpu) %>%
+    dplyr::filter(rpuid == RPU) %>%
+    dplyr::mutate(ftype = "Sink", terminalfl = 0) %>%
+    collect() 
+  
+  lkup = bind_rows(flowln_df, sinks_df)
+  
+  cats = readRDS(file.path(params$base_dir, "catchments_all.rds")) %>% 
+    select(featureid = FEATUREID, areqsqkm = AreaSqKM) %>% 
+    right_join(lkup, by = "featureid") %>% 
+    filter(!st_is_empty(.))
+
+  POIs <-  inner_join(read_sf(ref_gpkg, poi_layer), 
+                      select(st_drop_geometry(nhd), COMID, DnHydroseq), by = "COMID")
+  
+  POI_downstream <- filter(nhd, Hydroseq %in% POIs$DnHydroseq, AreaSqKM > 0)
+  
+  # Networks that terminate and are smaller than the threshold.
+  little_terminal <- filter(nhd, TerminalPa %in% 
+                            filter(nhd_outlets, 
+                                   TotDASqKM <= params$min_da_km & 
+                                   TerminalFl == 1)$TerminalPa)
+  
+  nhd_outlets_nonPOI <- st_compatibalize(nhd_outlets, POIs) %>%
+      filter(!COMID %in% POIs$COMID)
+  
+  outlets <- select(POIs, COMID) %>%
+    mutate(type = "outlet") %>%
+    bind_rows(mutate(select(nhd_outlets_nonPOI, COMID), type = "terminal")) %>%
+    filter(COMID %in% cats$featureid & !COMID %in% little_terminal$COMID)
+  
+  TerminalPaths <- unique(filter(nhd, COMID %in% outlets$COMID)$TerminalPa)
+  
+  # Create events for streamgages and TE Plants
+  events <- readRDS(file.path(params$base_dir, "gages_MDA.rds")) %>%
+    rename(COMID = Gage_COMID) %>%
+    right_join(select(st_drop_geometry(nhd), AreaSqKM, COMID, FromMeas, ToMeas), 
+               by = c("Final_COMID" = "COMID")) %>%
+    filter(REACH_meas - FromMeas > 5 & 
+             AreaSqKM > 2 & 
+             ToMeas - REACH_meas > 5) %>%
+    select(COMID, REACHCODE, REACH_meas) %>%
+    filter(!COMID %in% nhd_outlets$COMID)
+  
+  # Avoid refactoring catchments that are long and thin and reasonably large. 
+  avoid <- dplyr::filter(nhd, (sqrt(AreaSqKM) / LENGTHKM) > 3 & AreaSqKM > 1)
+  
+  # Attribute flowline network used for refactor
+  nhdplus_flines <- mutate(nhd, refactor = ifelse(TerminalPa %in% TerminalPaths, 1, 0), FTYPE = NULL) %>% 
+    filter(refactor == 1)
+
+write_sf(cats, out_gpkg, "nhd_catchment")
+write_sf(events, out_gpkg, "events")
+write_sf(nhdplus_flines, out_gpkg, "flowpaths")
+write_sf(data.frame(COMID = c(outlets$COMID, avoid$COMID, POI_downstream$COMID)), out_gpkg, "avoid")
+
+if(!is.null(params$AWS_bucket)){
+  aws.s3::put_object(
+        file   = out_gpkg, 
+        object = basename(out_gpkg), 
+        bucket = params$AWS_bucket,
+        multipart = TRUE)
+}
+
+}
+```

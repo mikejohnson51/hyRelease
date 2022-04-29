@@ -1,3 +1,22 @@
+#' @title File Check
+#' @description Check if a file exists and/or should be over ridden.
+#' @param filename character. Output filename.
+#' @param overwrite logical. If TRUE, filename is overwritten
+#' @return logical
+
+check_file = function(filename, overwrite = FALSE){
+
+  does_file_exist = file.exists(filename)
+
+  if(all(does_file_exist & overwrite)){
+    TRUE
+  } else if(!does_file_exist) {
+    TRUE
+  } else {
+    FALSE
+  }
+}
+
 #' @title Add length averaged slope to flowpaths
 #' @description Add length weighted slopes to refactored/aggregated flowpaths
 #' using the base NHDPlus slope estimates

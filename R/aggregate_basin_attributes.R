@@ -143,7 +143,7 @@ aggregate_basin_attributes = function(gpkg,
   }
 
   highPPT = ppt[, .SD > (5*rowMeans(ppt))]
-  lowPPT = ppt[, .SD < 1]
+  lowPPT  = ppt[, .SD < 1]
 
   high     <- data.table(t(highPPT))
   low      <- data.table(t(lowPPT))
@@ -153,12 +153,12 @@ aggregate_basin_attributes = function(gpkg,
   low[ , (mod_cols) := lapply(.SD, ff), .SDcols = mod_cols]
 
   traits = data.frame(ID = gridmet_out_id,
-                       meanPPT = rowMeans(ppt),
-                       snowFrac = rowSums(snow) / rowSums(ppt),
+                       meanPPT       = rowMeans(ppt),
+                       snowFrac      = rowSums(snow) / rowSums(ppt),
                        high_ppt_freq = rowSums(highPPT) / years,
-                       low_ppt_freq =  rowSums(lowPPT) / years,
-                       high_ppt_dur = colMeans(high, na.rm = TRUE),
-                       low_ppt_dur  = colMeans(low,  na.rm = TRUE))
+                       low_ppt_freq  =  rowSums(lowPPT) / years,
+                       high_ppt_dur  = colMeans(high, na.rm = TRUE),
+                       low_ppt_dur   = colMeans(low,  na.rm = TRUE))
 
 
   message("Processing Terrain (slope, mean elevation) ...")
@@ -170,7 +170,9 @@ aggregate_basin_attributes = function(gpkg,
   terrain = zonal::execute_zonal(t, cats, 'ID', join = FALSE) %>%
     setnames(c("ID", "elevation", "slope"))
 
-  terrain = left_join(terrain, select(st_drop_geometry(cats), .data$ID, areasqkm = .data$area_sqkm))
+  terrain = left_join(terrain,
+                      select(st_drop_geometry(cats), .data$ID, areasqkm = .data$area_sqkm),
+                       by = "ID")
 
   traits = left_join(traits, terrain, by = "ID")
 

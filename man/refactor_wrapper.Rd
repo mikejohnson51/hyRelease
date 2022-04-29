@@ -15,6 +15,7 @@ refactor_wrapper(
   cores = 1,
   facfdr = NULL,
   routing = NULL,
+  network = NULL,
   keep = 0.9,
   outfile
 )

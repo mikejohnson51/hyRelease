@@ -4,14 +4,20 @@
 \alias{get_UT_reference}
 \title{Extract upstream network from reference fabric}
 \usage{
-get_UT_reference(network, reference_fabric_dir, comid, outfile = NULL)
+get_UT_reference(
+  network,
+  reference_flowlines,
+  reference_catchments = NULL,
+  comid,
+  outfile = NULL
+)
 }
 \arguments{
 \item{network}{enhd_nhdplusatts data.frame}
 
-\item{reference_fabric_dir}{path to refernece network directory}
-
 \item{comid}{Origin of network trace (COMID)}
+
+\item{reference_fabric_dir}{path to refernece network directory}
 }
 \value{
 list containing catchment and flowpath networks

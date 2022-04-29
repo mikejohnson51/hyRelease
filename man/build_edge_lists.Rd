@@ -13,7 +13,7 @@ build_edge_lists(
   wb_prefix = "wb-",
   terminal_wb_prefix = "twb-",
   catchment_prefix = "cat-",
-  cutoff = 100000000,
+  cutoff = 1e+08,
   outdir
 )
 }

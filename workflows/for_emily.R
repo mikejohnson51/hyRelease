@@ -1,4 +1,6 @@
 library(sf)
+library(dplyr)
+
 
 wg_files = list.files('/Users/mjohnson/Downloads/WalnutGulch_subbasins', pattern = ".shp$", full.names = TRUE)
 
@@ -7,7 +9,8 @@ bind_rows(lapply(wg_files, read_sf)) %>%
   mutate(ID = gsub(".shp", "", basename(wg_files))) %>%
   write_sf("/Users/mjohnson/Downloads/WalnutGulch.gpkg", "catchments")
 
-aggregate_lstm_params(gpkg = '/Users/mjohnson/Downloads/WalnutGulch.gpkg' ,
+
+aggregate_basin_attributes(gpkg = '/Users/mjohnson/Downloads/WalnutGulch.gpkg' ,
                       catchment_name = "catchments",
                       geo_dir = file.path(geogrids::geo_path(), "climate"),
                       years = 5,

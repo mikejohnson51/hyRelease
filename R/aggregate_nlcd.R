@@ -14,16 +14,6 @@
 #' @importFrom tidyr pivot_wider
 #' @importFrom data.table fwrite
 
-# system.time({
-#   aggregate_nlcd(gpkg,
-#                catchment_name = "refactored_catchments",
-#                imperv_path    = '/Volumes/Transcend/ngen/nlcd_2019_impervious_l48_20210604/nlcd_2019_impervious_l48_20210604.img',
-#                lc_path        = '/Volumes/Transcend/ngen/nlcd_2019_land_cover_l48_20210604/nlcd_2019_land_cover_l48_20210604.img',
-#                out_file = '/Users/mjohnson/Downloads/nlcd_test.csv'
-#                )
-#
-# })
-
 aggregate_nlcd = function(gpkg,
                          catchment_name,
                          imperv_path = TRUE,
